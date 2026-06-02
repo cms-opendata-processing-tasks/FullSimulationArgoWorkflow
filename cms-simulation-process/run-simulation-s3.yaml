@@ -1,0 +1,658 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: simulation-process-
+spec:
+  entrypoint: cms-full-sim
+  serviceAccountName: argo-service-account
+
+  arguments:
+    parameters:
+      - name: bucket
+        value: mirastorage
+      - name: dataName # to-do: better name for this
+        value: "BTV-RunIISummer20UL16"
+      - name: nPileupFiles
+        value: 1
+    # to-do: figure out arguments to be more generalized for data-processing
+
+  templates:
+    - name: cms-full-sim # to-do: change name
+      inputs:
+        parameters:
+          - name: bucket
+          - name: dataName
+          - name: nPileupFiles
+
+      dag:
+        tasks:
+          - name: gen
+            template: gen-template
+            arguments:
+              parameters:
+                - name: bucket
+                  value: "{{inputs.parameters.bucket}}"
+                - name: dataName
+                  value: "{{inputs.parameters.dataName}}"
+                - name: nPileupFiles
+                  value: "{{inputs.parameters.nPileupFiles}}"
+
+          - name: sim
+            dependencies: [gen]
+            template: sim-template
+            arguments:
+              parameters:
+                - name: bucket
+                  value: "{{inputs.parameters.bucket}}"
+                - name: dataName
+                  value: "{{inputs.parameters.dataName}}"
+                - name: nPileupFiles
+                  value: "{{inputs.parameters.nPileupFiles}}"
+
+          - name: pre-digi2raw
+            dependencies: [sim]
+            template: pre-digi2raw-template
+            arguments:
+              parameters:
+                - name: bucket
+                  value: "{{inputs.parameters.bucket}}"
+                - name: dataName
+                  value: "{{inputs.parameters.dataName}}"
+                - name: nPileupFiles
+                  value: "{{inputs.parameters.nPileupFiles}}"
+
+          - name: digi2raw
+            dependencies: [pre-digi2raw]
+            template: digi2raw-template
+            arguments:
+              parameters:
+                - name: bucket
+                  value: "{{inputs.parameters.bucket}}"
+                - name: dataName
+                  value: "{{inputs.parameters.dataName}}"
+                - name: nPileupFiles
+                  value: "{{inputs.parameters.nPileupFiles}}"
+
+          - name: hlt
+            dependencies: [digi2raw]
+            template: hlt-template
+            arguments:
+              parameters:
+                - name: bucket
+                  value: "{{inputs.parameters.bucket}}"
+                - name: dataName
+                  value: "{{inputs.parameters.dataName}}"
+
+          - name: reco
+            dependencies: [hlt]
+            template: reco-template
+            arguments:
+              parameters:
+                - name: bucket
+                  value: "{{inputs.parameters.bucket}}"
+                - name: dataName
+                  value: "{{inputs.parameters.dataName}}"
+                - name: nPileupFiles
+                  value: "{{inputs.parameters.nPileupFiles}}"
+
+          - name: pat
+            dependencies: [reco]
+            template: pat-template
+            arguments:
+              parameters:
+                - name: bucket
+                  value: "{{inputs.parameters.bucket}}"
+                - name: dataName
+                  value: "{{inputs.parameters.dataName}}"
+                - name: nPileupFiles
+                  value: "{{inputs.parameters.nPileupFiles}}"
+
+          - name: nano
+            dependencies: [pat]
+            template: nano-template
+            arguments:
+              parameters:
+                - name: bucket
+                  value: "{{inputs.parameters.bucket}}"
+                - name: dataName
+                  value: "{{inputs.parameters.dataName}}"
+                - name: nPileupFiles
+                  value: "{{inputs.parameters.nPileupFiles}}"
+    - name: gen-template
+      inputs:
+        parameters:
+          - name: bucket
+          - name: dataName
+
+        artifacts:
+          - name: GEN-config
+            path: /code/CMSSW_10_6_30/src/config.py # path for file in container
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1 # placeholder, To-do
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/config.py # path where it stays in the cloud storage
+
+      outputs:
+        artifacts:
+          - name: GEN-root
+            path: /code/CMSSW_10_6_30/src/Simulation/{{inputs.parameters.dataName}}GEN-00010.root
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1 # placeholder, To-do
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/GEN.root # path where it stays in the cloud storage
+
+      script:
+        image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
+        command: [bash]
+        source: |
+          # write script here
+
+          # Init first with sudo and then cmsusr
+          echo "Initializing cmsenv"
+          sudo --preserve-env=CMS_INSTALL_DIR,CMSSW_VERSION,SCRAM_ARCH /opt/cms/entrypoint.sh
+          source /opt/cms/entrypoint.sh
+
+          cd /code/CMSSW_10_6_30/src/
+
+          echo "Changing ownership"
+          sudo chown -R cmsusr:cmsusr /code/CMSSW_10_6_30
+          echo "Now in" $(pwd)
+
+          mkdir -p Simulation
+          chown -R $USER:$USER Simulation
+          cd Simulation
+          echo "Creating ED Analyzer"
+          mkedanlzr Sim
+
+          scram b
+          REPORT_NAME=BTV-{{inputs.parameters.dataName}}GEN-00010_report.xml
+
+          cmsRun -e -j $REPORT_NAME ../config.py || exit $?
+
+    - name: sim-template
+      inputs:
+        parameters:
+          - name: bucket
+          - name: dataName
+
+        artifacts:
+          - name: GEN-root
+            path: /code/CMSSW_10_6_30/src/Simulation/{{inputs.parameters.dataName}}GEN-00010.root # polku missa tiedosto on kontissa
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1 # placeholder, To-do
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/GEN.root # path where it stays in the cloud storage
+
+      outputs:
+        artifacts:
+          - name: SIM-root
+            path: /code/CMSSW_10_6_30/src/Simulation/{{inputs.parameters.dataName}}SIM-00010.root
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1 # placeholder, To-do
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/SIM.root # path where it stays in the cloud storage
+      script:
+        image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
+        command: [bash]
+        source: |
+          # Init first with sudo and then cmsusr
+          echo "Initializing cmsenv"
+          sudo --preserve-env=CMS_INSTALL_DIR,CMSSW_VERSION,SCRAM_ARCH /opt/cms/entrypoint.sh
+          source /opt/cms/entrypoint.sh
+
+          cd /code/CMSSW_10_6_30/src/Simulation
+
+          echo "Changing ownership"
+          sudo chown -R cmsusr:cmsusr /code/CMSSW_10_6_30
+          echo "Now in" $(pwd)
+
+          PYTHON_FILENAME={{inputs.parameters.dataName}}SIM-00010_1_cfg.py
+          OUTPUT_FILE={{inputs.parameters.dataName}}SIM-00010.root
+          INPUT_FILE={{inputs.parameters.dataName}}GEN-00010.root
+
+          cmsDriver.py --python_filename $PYTHON_FILENAME --eventcontent RAWSIM \
+          --customise Configuration/DataProcessing/Utils.addMonitoring --datatier GEN-SIM \
+          --fileout file:$OUTPUT_FILE --conditions 106X_mcRun2_asymptotic_v13 --beamspot Realistic25ns13TeV2016Collision \
+          --step SIM --geometry DB:Extended --filein file:$INPUT_FILE --era Run2_2016 --runUnscheduled --no_exec --mc -n 5
+
+          REPORT_NAME={{inputs.parameters.dataName}}SIM-00010_report.xml
+          cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
+
+    - name: pre-digi2raw-template
+      inputs:
+        parameters:
+          - name: bucket
+          - name: dataName
+
+      outputs:
+        artifacts:
+          - name: pileup_file_list
+            path: bucket/pileup_file_list.txt
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1 # placeholder, To-do
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/pileup_file_list.txt # path where it stays in the cloud storage
+
+      script:
+        image: cernopendata/cernopendata-client
+        command: [bash]
+        source: |
+          mkdir bucket
+          cernopendata-client get-file-locations --recid 30595 --protocol xrootd > bucket/pileup_file_list.txt
+
+    - name: digi2raw-template
+      inputs:
+        parameters:
+          - name: bucket
+          - name: dataName
+          - name: nPileupFiles # To-do: make handling of nEvents to nPileupFiles
+        artifacts:
+          - name: pileup_file_list
+            path: /code/CMSSW_10_6_30/src/Simulation/pileup_file_list.txt
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1 # placeholder, To-do
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/pileup_file_list.txt # path where it stays in the cloud storage
+
+          - name: SIM-root
+            path: /code/CMSSW_10_6_30/src/Simulation/{{inputs.parameters.dataName}}SIM-00010.root
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1 # placeholder, To-do
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/SIM.root # path where it stays in the cloud storage
+
+      outputs:
+        artifacts:
+          - name: DIGI2RAW-root
+            path: /code/CMSSW_10_6_30/src/Simulation/{{inputs.parameters.dataName}}DIGIPremix-00010.root
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1 # placeholder, To-do
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/DIGIPremix.root # path where it stays in the cloud storage
+      script:
+        image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
+        command: [bash]
+        source: |
+          # Init first with sudo and then cmsusr
+          echo "Initializing cmsenv"
+          sudo --preserve-env=CMS_INSTALL_DIR,CMSSW_VERSION,SCRAM_ARCH /opt/cms/entrypoint.sh
+          source /opt/cms/entrypoint.sh
+
+          cd /code/CMSSW_10_6_30/src/Simulation
+
+          echo "Changing ownership"
+          sudo chown -R cmsusr:cmsusr /code/CMSSW_10_6_30
+          echo "Now in" $(pwd)
+
+          PYTHON_FILENAME={{inputs.parameters.dataName}}DIGIPremix-00010_1_cfg.py
+          OUTPUT_FILE={{inputs.parameters.dataName}}DIGIPremix-00010.root
+          INPUT_FILE={{inputs.parameters.dataName}}SIM-00010.root
+
+          # To-do: Check how it works with multiple files, now nPileupFiles is always 1 --> affects --pileup_input argument in cmsDriver
+          mapfile -n {{inputs.parameters.nPileupFiles}} SELECTED_PILEUP_FILES < pileup_file_list.txt
+
+          cmsDriver.py --python_filename $PYTHON_FILENAME --eventcontent PREMIXRAW \
+          --customise Configuration/DataProcessing/Utils.addMonitoring --datatier GEN-SIM-DIGI \
+          --fileout file:$OUTPUT_FILE --pileup_input ${SELECTED_PILEUP_FILES[0]} \
+          --datamix PreMix --procModifiers premix_stage2 --conditions 106X_mcRun2_asymptotic_v17 --step DIGI,DATAMIX,L1,DIGI2RAW \
+          --geometry DB:Extended --filein file:$INPUT_FILE --era Run2_2016 --runUnscheduled --no_exec --mc -n 5
+
+          REPORT_NAME={{inputs.parameters.dataName}}DIGIPremix-00010_report.xml
+          cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
+
+    - name: hlt-template
+      inputs:
+        parameters:
+          - name: bucket
+          - name: dataName
+
+        artifacts:
+          - name: DIGI2RAW-root
+            path: /code/CMSSW_10_6_30/src/Simulation/{{inputs.parameters.dataName}}DIGIPremix-00010.root
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1 # placeholder, To-do
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/DIGIPremix.root # path where it stays in the cloud storage
+
+      outputs:
+        artifacts:
+          - name: HLT-root
+            path: /code/CMSSW_10_6_30/src/Simulation/{{inputs.parameters.dataName}}HLT-00010.root
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1 # placeholder, To-do
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/HLT.root # path where it stays in the cloud storage
+      script:
+        image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker/cmssw_8_0_33_ul-slc7_amd64_gcc530
+        command: [bash]
+        source: |
+          # Init first with sudo and then cmsusr
+          echo "Initializing cmsenv"
+          sudo --preserve-env=CMS_INSTALL_DIR,CMSSW_VERSION,SCRAM_ARCH /opt/cms/entrypoint.sh
+          source /opt/cms/entrypoint.sh
+
+          cd /code/CMSSW_10_6_30/src/Simulation
+
+          echo "Changing ownership"
+          sudo chown -R cmsusr:cmsusr /code/CMSSW_10_6_30
+          echo "Now in" $(pwd)
+
+          PYTHON_FILENAME={{inputs.parameters.dataName}}HLT-00010_1_cfg.py
+          OUTPUT_FILE={{inputs.parameters.dataName}}HLT-00010.root
+          INPUT_FILE={{inputs.parameters.dataName}}DIGIPremix-00010.root
+
+          cmsDriver.py --python_filename $PYTHON_FILENAME --eventcontent RAWSIM \
+          --outputCommand "keep *_mix_*_*,keep *_genPUProtons_*_*" \
+          --customise Configuration/DataProcessing/Utils.addMonitoring --datatier GEN-SIM-RAW \
+          --inputCommands "keep *","drop *_*_BMTF_*","drop *PixelFEDChannel*_*_*_*" \
+          --fileout file:$OUTPUT_FILE --customise_commands 'process.source.bypassVersionCheck = cms.untracked.bool(True)' \
+          --step HLT:25ns15e33_v4 --conditions 80X_mcRun2_asymptotic_2016_TrancheIV_v6 \
+          --geometry DB:Extended --filein file:$INPUT_FILE --era Run2_2016 --no_exec --mc -n 5
+
+          REPORT_NAME={{inputs.parameters.dataName}}DIGIPremix-00010_report.xml
+          cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
+
+    - name: reco-template
+      inputs:
+        parameters:
+          - name: bucket
+          - name: dataName
+        artifacts:
+          - name: HLT-root
+            path: /code/CMSSW_10_6_30/src/Simulation/{{inputs.parameters.dataName}}HLT-00010.root
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1 # placeholder, To-do
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/HLT.root # path where it stays in the cloud storage
+
+      outputs:
+        artifacts:
+          - name: RECO-root
+            path: /code/CMSSW_10_6_30/src/Simulation/{{inputs.parameters.dataName}}RECO-00010.root
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/RECO.root
+
+      script:
+        image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
+        command: [bash]
+        source: |
+          # Init first with sudo and then cmsusr
+          echo "Initializing cmsenv"
+          sudo --preserve-env=CMS_INSTALL_DIR,CMSSW_VERSION,SCRAM_ARCH /opt/cms/entrypoint.sh
+          source /opt/cms/entrypoint.sh
+
+          cd /code/CMSSW_10_6_30/src/Simulation
+
+          echo "Changing ownership"
+          sudo chown -R cmsusr:cmsusr /code/CMSSW_10_6_30
+          echo "Now in" $(pwd)
+
+          PYTHON_FILENAME={{inputs.parameters.dataName}}RECO-00010_1_cfg.py
+          OUTPUT_FILE={{inputs.parameters.dataName}}RECO-00010.root
+          INPUT_FILE={{inputs.parameters.dataName}}HLT-00010.root
+
+          cmsDriver.py --python_filename $PYTHON_FILENAME --eventcontent AODSIM \
+          --customise Configuration/DataProcessing/Utils.addMonitoring --datatier AODSIM --fileout file:$OUTPUT_FILE \
+          --conditions 106X_mcRun2_asymptotic_v13 --step RAW2DIGI,L1Reco,RECO,RECOSIM --geometry DB:Extended \
+          --filein file:$INPUT_FILE --era Run2_2016 --runUnscheduled --no_exec --mc -n 5
+
+          REPORT_NAME={{inputs.parameters.dataName}}RECO-00010_report.xml
+
+          cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
+
+    - name: pat-template
+      inputs:
+        parameters:
+          - name: bucket
+          - name: dataName
+        artifacts:
+          - name: RECO-root
+            path: /code/CMSSW_10_6_30/src/Simulation/{{inputs.parameters.dataName}}RECO-00010.root
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/RECO.root
+      outputs:
+        artifacts:
+          - name: PAT-root
+            path: /code/CMSSW_10_6_30/src/Simulation/{{inputs.parameters.dataName}}PAT-00010.root
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/PAT.root
+
+      script:
+        image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
+        command: [bash]
+        source: |
+          # Init first with sudo and then cmsusr
+          echo "Initializing cmsenv"
+          sudo --preserve-env=CMS_INSTALL_DIR,CMSSW_VERSION,SCRAM_ARCH /opt/cms/entrypoint.sh
+          source /opt/cms/entrypoint.sh
+
+          cd /code/CMSSW_10_6_30/src/Simulation
+
+          echo "Changing ownership"
+          sudo chown -R cmsusr:cmsusr /code/CMSSW_10_6_30
+          echo "Now in" $(pwd)
+
+          PYTHON_FILENAME={{inputs.parameters.dataName}}PAT-00010_1_cfg.py
+          OUTPUT_FILE={{inputs.parameters.dataName}}PAT-00010.root
+          INPUT_FILE={{inputs.parameters.dataName}}RECO-00010.root
+
+          cmsDriver.py --python_filename $PYTHON_FILENAME --eventcontent MINIAODSIM \
+          --customise Configuration/DataProcessing/Utils.addMonitoring --datatier MINIAODSIM --fileout file:$OUTPUT_FILE \
+          --conditions 106X_mcRun2_asymptotic_v17 --step PAT --procModifiers run2_miniAOD_UL --geometry DB:Extended \
+          --filein file:$INPUT_FILE --era Run2_2016 --runUnscheduled --no_exec --mc -n 5
+
+          REPORT_NAME={{inputs.parameters.dataName}}PAT-00010_report.xml
+
+          cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
+
+    - name: nano-template
+      inputs:
+        parameters:
+          - name: bucket
+          - name: dataName
+        artifacts:
+          - name: PAT-root
+            path: /code/CMSSW_10_6_30/src/Simulation/{{inputs.parameters.dataName}}PAT-00010.root
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/PAT.root
+      outputs:
+        artifacts:
+          - name: NANO-root
+            path: /code/CMSSW_10_6_30/src/Simulation/{{inputs.parameters.dataName}}NANO-00010.root
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/NANO.root
+
+      script:
+        image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
+        command: [bash]
+        source: |
+          # Init first with sudo and then cmsusr
+          echo "Initializing cmsenv"
+          sudo --preserve-env=CMS_INSTALL_DIR,CMSSW_VERSION,SCRAM_ARCH /opt/cms/entrypoint.sh
+          source /opt/cms/entrypoint.sh
+
+          cd /code/CMSSW_10_6_30/src/Simulation
+
+          echo "Changing ownership"
+          sudo chown -R cmsusr:cmsusr /code/CMSSW_10_6_30
+          echo "Now in" $(pwd)
+          PYTHON_FILENAME={{inputs.parameters.dataName}}NANO-00010_1_cfg.py
+          OUTPUT_FILE={{inputs.parameters.dataName}}NANO-00010.root
+          INPUT_FILE={{inputs.parameters.dataName}}PAT-00010.root
+
+          cmsDriver.py --python_filename $PYTHON_FILENAME --eventcontent NANOEDMAODSIM \
+          --customise Configuration/DataProcessing/Utils.addMonitoring --datatier NANOAODSIM \
+          --fileout file:$OUTPUT_FILE --conditions 106X_mcRun2_asymptotic_v17 --step NANO \
+          --filein file:$INPUT_FILE --era Run2_2016,run2_nanoAOD_106Xv2 --no_exec --mc -n 5
+
+          cmsRun $PYTHON_FILENAME
