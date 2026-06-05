@@ -17,7 +17,7 @@ spec:
       #- name: nPileupFiles
       #  value: 1
       - name: totEvents
-        value: 30
+        value: 10
       - name: nJobs
         value: 3
     # to-do: figure out arguments to be more generalized for data-processing, like name of fragment
@@ -272,7 +272,7 @@ spec:
       outputs:
         artifacts:
           - name: GEN-root
-            path: /code/CMSSW_10_6_30/src/GEN
+            path: /code/CMSSW_10_6_30/src/Simulation/GEN
             archive:
               none: {}
             s3:
@@ -313,7 +313,9 @@ spec:
           echo "Creating ED Analyzer"
           mkedanlzr Sim
 
-          cd ..
+          echo "Contents of ../Configuration/GenProduction/python"
+          echo $(ls ../Configuration/GenProduction/python)
+
           scram b
 
           # Make a dir where all the different jobs store the .root output files from this step
@@ -353,7 +355,7 @@ spec:
 
         artifacts:
           - name: GEN-root
-            path: /code/CMSSW_10_6_30/src/GEN # polku missa tiedosto on kontissa
+            path: /code/CMSSW_10_6_30/src/Simulation/GEN # polku missa tiedosto on kontissa
             archive:
               none: {}
             s3:
@@ -372,7 +374,7 @@ spec:
       outputs:
         artifacts:
           - name: SIM-root
-            path: /code/CMSSW_10_6_30/src/SIM
+            path: /code/CMSSW_10_6_30/src/Simulation/SIM
             archive:
               none: {}
             s3:
@@ -396,11 +398,15 @@ spec:
           sudo --preserve-env=CMS_INSTALL_DIR,CMSSW_VERSION,SCRAM_ARCH /opt/cms/entrypoint.sh
           source /opt/cms/entrypoint.sh
 
-          cd /code/CMSSW_10_6_30/src
+          cd /code/CMSSW_10_6_30/src/Simulation
 
           echo "Changing ownership"
           sudo chown -R cmsusr:cmsusr /code/CMSSW_10_6_30
           echo "Now in" $(pwd)
+
+          echo "Creating ED Analyzer"
+          mkedanlzr Sim
+          scram b
 
           mkdir SIM
 
@@ -460,7 +466,7 @@ spec:
           #- name: nPileupFiles # To-do: make handling of totEvents to nPileupFiles
         artifacts:
           - name: pileup_file_list
-            path: /code/CMSSW_10_6_30/src/pileup_file_list.txt
+            path: /code/CMSSW_10_6_30/src/Simulation/pileup_file_list.txt
             archive:
               none: {}
             s3:
@@ -477,7 +483,7 @@ spec:
               key: FullSim/{{inputs.parameters.dataName}}/pileup_file_list.txt # path where it stays in the cloud storage
 
           - name: SIM-root
-            path: /code/CMSSW_10_6_30/src/SIM
+            path: /code/CMSSW_10_6_30/src/Simulation/SIM
             archive:
               none: {}
             s3:
@@ -496,7 +502,7 @@ spec:
       outputs:
         artifacts:
           - name: DIGI2RAW-root
-            path: /code/CMSSW_10_6_30/src/DIGIPremix
+            path: /code/CMSSW_10_6_30/src/Simulation/DIGIPremix
             archive:
               none: {}
             s3:
@@ -520,11 +526,15 @@ spec:
           sudo --preserve-env=CMS_INSTALL_DIR,CMSSW_VERSION,SCRAM_ARCH /opt/cms/entrypoint.sh
           source /opt/cms/entrypoint.sh
 
-          cd /code/CMSSW_10_6_30/src
+          cd /code/CMSSW_10_6_30/src/Simulation
 
           echo "Changing ownership"
           sudo chown -R cmsusr:cmsusr /code/CMSSW_10_6_30
           echo "Now in" $(pwd)
+
+          echo "Creating ED Analyzer"
+          mkedanlzr Sim
+          scram b          
 
           mkdir DIGIPremix
 
@@ -555,7 +565,7 @@ spec:
 
         artifacts:
           - name: DIGIPremix-root
-            path: /code/CMSSW_10_6_30/src/DIGIPremix
+            path: /code/CMSSW_8_0_33_UL/src/Simulation/DIGIPremix
             archive:
               none: {}
             s3:
@@ -574,7 +584,7 @@ spec:
       outputs:
         artifacts:
           - name: HLT-root
-            path: /code/CMSSW_10_6_30/src/HLT
+            path: /code/CMSSW_8_0_33_UL/src/Simulation/HLT
             archive:
               none: {}
             s3:
@@ -598,11 +608,17 @@ spec:
           sudo --preserve-env=CMS_INSTALL_DIR,CMSSW_VERSION,SCRAM_ARCH /opt/cms/entrypoint.sh
           source /opt/cms/entrypoint.sh
 
-          cd /code/CMSSW_10_6_30/src
+          # Different image, the Simulation dir has to be created first
+          mkdir -p /code/CMSSW_8_0_33_UL/src/Simulation
+          cd /code/CMSSW_8_0_33_UL/src/Simulation
 
           echo "Changing ownership"
-          sudo chown -R cmsusr:cmsusr /code/CMSSW_10_6_30
+          sudo chown -R cmsusr:cmsusr /code/CMSSW_8_0_33_UL
           echo "Now in" $(pwd)
+
+          echo "Creating ED Analyzer"
+          mkedanlzr Sim
+          scram b
 
           mkdir HLT
 
@@ -631,7 +647,7 @@ spec:
           - name: eventsInJob
         artifacts:
           - name: HLT-root
-            path: /code/CMSSW_10_6_30/src/HLT
+            path: /code/CMSSW_10_6_30/src/Simulation/HLT
             archive:
               none: {}
             s3:
@@ -650,7 +666,7 @@ spec:
       outputs:
         artifacts:
           - name: RECO-root
-            path: /code/CMSSW_10_6_30/src/RECO
+            path: /code/CMSSW_10_6_30/src/Simulation/RECO
             archive:
               none: {}
             s3:
@@ -675,11 +691,15 @@ spec:
           sudo --preserve-env=CMS_INSTALL_DIR,CMSSW_VERSION,SCRAM_ARCH /opt/cms/entrypoint.sh
           source /opt/cms/entrypoint.sh
 
-          cd /code/CMSSW_10_6_30/src
+          cd /code/CMSSW_10_6_30/src/Simulation
 
           echo "Changing ownership"
           sudo chown -R cmsusr:cmsusr /code/CMSSW_10_6_30
           echo "Now in" $(pwd)
+
+          echo "Creating ED Analyzer"
+          mkedanlzr Sim
+          scram b
 
           mkdir RECO
 
@@ -706,7 +726,7 @@ spec:
           - name: eventsInJob
         artifacts:
           - name: RECO-root
-            path: /code/CMSSW_10_6_30/src/RECO
+            path: /code/CMSSW_10_6_30/src/Simulation/RECO
             archive:
               none: {}
             s3:
@@ -724,7 +744,7 @@ spec:
       outputs:
         artifacts:
           - name: PAT-root
-            path: /code/CMSSW_10_6_30/src/PAT
+            path: /code/CMSSW_10_6_30/src/Simulation/PAT
             archive:
               none: {}
             s3:
@@ -749,11 +769,15 @@ spec:
           sudo --preserve-env=CMS_INSTALL_DIR,CMSSW_VERSION,SCRAM_ARCH /opt/cms/entrypoint.sh
           source /opt/cms/entrypoint.sh
 
-          cd /code/CMSSW_10_6_30/src
+          cd /code/CMSSW_10_6_30/src/Simulation
 
           echo "Changing ownership"
           sudo chown -R cmsusr:cmsusr /code/CMSSW_10_6_30
           echo "Now in" $(pwd)
+
+          echo "Creating ED Analyzer"
+          mkedanlzr Sim
+          scram b
 
           mkdir PAT
 
@@ -780,7 +804,7 @@ spec:
           - name: eventsInJob
         artifacts:
           - name: PAT-root
-            path: /code/CMSSW_10_6_30/src/PAT
+            path: /code/CMSSW_10_6_30/src/Simulation/PAT
             archive:
               none: {}
             s3:
@@ -798,7 +822,7 @@ spec:
       outputs:
         artifacts:
           - name: NANO-root
-            path: /code/CMSSW_10_6_30/src/NANO
+            path: /code/CMSSW_10_6_30/src/Simulation/NANO
             archive:
               none: {}
             s3:
@@ -823,11 +847,15 @@ spec:
           sudo --preserve-env=CMS_INSTALL_DIR,CMSSW_VERSION,SCRAM_ARCH /opt/cms/entrypoint.sh
           source /opt/cms/entrypoint.sh
 
-          cd /code/CMSSW_10_6_30/src
+          cd /code/CMSSW_10_6_30/src/Simulation
 
           echo "Changing ownership"
           sudo chown -R cmsusr:cmsusr /code/CMSSW_10_6_30
           echo "Now in" $(pwd)
+
+          echo "Creating ED Analyzer"
+          mkedanlzr Sim
+          scram b
 
           mkdir NANO
 
