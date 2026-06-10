@@ -15,7 +15,7 @@ spec:
       - name: fragFileName
         value: "fragments.py"
       - name: totEvents
-        value: 4
+        value: 320
       - name: nJobs
         value: 2
       - name: runYear
@@ -53,6 +53,7 @@ spec:
               parameters:
                 - name: runYear
                   value: "{{inputs.parameters.runYear}}"
+                  # To-do: Does HeavyIon have different 2016 run conditions?
 
           - name: gen
             dependencies: [divide-jobs, define-parameters]
@@ -188,6 +189,16 @@ spec:
                 - name: conditionsDigiPatNano
                   value: "{{tasks.define-parameters.outputs.parameters.conditionsDigiPatNano}}"
             withParam: "{{tasks.divide-jobs.outputs.result}}"
+
+          - name: validate-example
+            dependencies: [nano]
+            template: validate-template
+            arguments:
+              parameters:
+                - name: bucket
+                  value: "{{inputs.parameters.bucket}}"
+                - name: dataName
+                  value: "{{inputs.parameters.dataName}}"
 
     - name: divide-jobs-template
       inputs:
@@ -903,3 +914,153 @@ spec:
           --filein file:$INPUT_FILE --era Run2_2016,run2_nanoAOD_106Xv2 --no_exec --mc -n $EVENTS
 
           cmsRun $PYTHON_FILENAME
+
+    - name: validate-template
+      inputs:
+        parameters:
+          - name: bucket
+          - name: dataName
+
+        artifacts:
+          - name: NANO-root
+            path: /tmp/NANO
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/NANO
+
+      outputs:
+        artifacts:
+          - name: plots
+            path: /tmp/plots
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/plots
+
+      script:
+        image: python:3.11-slim
+        command: [bash]
+        source: |
+          import uproot
+          import os
+          set -e
+
+          pip install --no-cache-dir uproot awkward vector matplotlib
+
+          mkdir -p /tmp/plots
+          cd /tmp/plots
+
+          cat > analyse.py << 'EOPY'
+          import uproot
+          import awkward as ak
+          import vector
+          import matplotlib.pyplot as plt
+          import numpy as np
+
+          vector.register_awkward()
+          input_file = "/tmp/NANO/1.root"
+          print(f"Loading {input_file}...")
+
+          with uproot.open(input_file) as f:
+              tree = f["Events"]
+              nElectrons = tree["nElectron"].array()
+              pdgId = tree["Electron_pdgId"].array()
+              pt = tree["Electron_pt"].array()
+              eta = tree["Electron_eta"].array()
+              phi = tree["Electron_phi"].array()
+              mass = tree["Electron_mass"].array()
+
+              print(f"Loaded {len(nElectrons)} events.")
+
+              nElectrons_np = ak.to_numpy(nElectrons)
+              print(f"nElectrons stats: min={nElectrons_np.min()}, max={nElectrons_np.max()}")
+
+              plt.figure(figsize=(8, 5))
+              plt.hist(nElectrons_np, bins=120, histtype='step', linewidth=2)
+              plt.title("Number of Electrons per Event")
+              plt.xlabel("nElectrons")
+              plt.ylabel("Events")
+              plt.grid(True, alpha=0.3)
+              plt.savefig("h_num_cands.png")
+              plt.close()
+
+              plt.figure(figsize=(8, 5))
+              all_pdg = ak.flatten(pdgId)
+              plt.hist(ak.to_numpy(all_pdg), bins=range(-20, 20), histtype='step', linewidth=2)
+              plt.title("Type of Electrons (PDG ID)")
+              plt.xlabel("PDG ID")
+              plt.ylabel("Counts")
+              plt.grid(True, alpha=0.3)
+              plt.savefig("h_pdgid_cands.png")
+              plt.close()
+
+              particles = vector.zip({"pt": pt, "eta": eta, "phi": phi, "mass": mass})
+              mu_mask = ((pdgId == 13) | (pdgId == -13)) & (pt > 2.0)
+              el_mask = ((pdgId == 11) | (pdgId == -11)) & (pt > 2.0)
+
+              mu_vec = particles[mu_mask]
+              mu_id = pdgId[mu_mask]
+              el_vec = particles[el_mask]
+              el_id = pdgId[el_mask]
+
+              mu_pairs = ak.combinations(mu_vec, 2)
+              mu_id_pairs = ak.combinations(mu_id, 2)
+              p1_mu, p2_mu = mu_pairs["0"], mu_pairs["1"]
+              id1_mu, id2_mu = mu_id_pairs["0"], mu_id_pairs["1"]
+              os_mu = (id1_mu * id2_mu) < 0
+              dimuon_mass = (p1_mu + p2_mu)[os_mu].mass
+
+              el_pairs = ak.combinations(el_vec, 2)
+              el_id_pairs = ak.combinations(el_id, 2)
+              p1_el, p2_el = el_pairs["0"], el_pairs["1"]
+              id1_el, id2_el = el_id_pairs["0"], el_id_pairs["1"]
+              os_el = (id1_el * id2_el) < 0
+              dielectron_mass = (p1_el + p2_el)[os_el].mass
+
+              plt.figure(figsize=(8, 6))
+              dimuon_flat = ak.flatten(dimuon_mass)
+              if len(dimuon_flat) > 0:
+                  plt.hist(ak.to_numpy(dimuon_flat), bins=120, range=(0, 120), histtype='step', color='blue', linewidth=2)
+              plt.title("Dimuon Invariant Mass")
+              plt.xlabel("M_{mumu} (GeV)")
+              plt.ylabel("Events")
+              plt.grid(True, alpha=0.3)
+              plt.savefig("h_dimuon_mass.png")
+              plt.close()
+
+              plt.figure(figsize=(8, 6))
+              dielectron_flat = ak.flatten(dielectron_mass)
+              if len(dielectron_flat) > 0:
+                  plt.hist(ak.to_numpy(dielectron_flat), bins=120, range=(0, 120), histtype='step', color='red', linewidth=2)
+              plt.title("Dielectron Invariant Mass")
+              plt.xlabel("M_{ee} (GeV)")
+              plt.ylabel("Events")
+              plt.grid(True, alpha=0.3)
+              plt.savefig("h_dielectron_mass.png")
+              plt.close()
+              print("Analysis complete.")
+          EOPY
+
+          python3 analyse.py
+          ls -l /tmp/plots
