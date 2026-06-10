@@ -14,13 +14,12 @@ spec:
         value: "parallel-testing"
       - name: fragFileName
         value: "fragments.py"
-      #- name: nPileupFiles
-      #  value: 1
       - name: totEvents
-        value: 30
+        value: 4
       - name: nJobs
-        value: 3
-    # to-do: figure out arguments to be more generalized for data-processing, like name of fragment
+        value: 2
+      - name: runYear
+        value: "2016" # default is that the run is 2016
 
   templates:
     - name: cms-full-sim # to-do: change name
@@ -29,9 +28,9 @@ spec:
           - name: bucket
           - name: dataName
           - name: fragFileName
-          # - name: nPileupFiles
           - name: totEvents
           - name: nJobs
+          - name: runYear
 
       dag:
         tasks:
@@ -45,13 +44,18 @@ spec:
                   value: "{{inputs.parameters.dataName}}"
                 - name: totEvents
                   value: "{{inputs.parameters.totEvents}}"
-                #- name: nPileupFiles
-                #  value: "{{inputs.parameters.nPileupFiles}}"
                 - name: nJobs
                   value: "{{inputs.parameters.nJobs}}"
 
+          - name: define-parameters
+            template: define-parameters-template
+            arguments:
+              parameters:
+                - name: runYear
+                  value: "{{inputs.parameters.runYear}}"
+
           - name: gen
-            dependencies: [divide-jobs]
+            dependencies: [divide-jobs, define-parameters]
             template: gen-template
             arguments:
               parameters:
@@ -65,6 +69,10 @@ spec:
                   value: "{{item.jobIndex}}"
                 - name: eventsInJob
                   value: "{{item.eventsinjob}}"
+                - name: conditionsGenSimReco
+                  value: "{{tasks.define-parameters.outputs.parameters.conditionsGenSimReco}}" # To-do: better handling than array --> sh does not have object or dict datatype
+                - name: beamspot
+                  value: "{{tasks.define-parameters.outputs.parameters.beamspot}}"
             withParam: "{{tasks.divide-jobs.outputs.result}}"
 
           - name: sim
@@ -78,12 +86,12 @@ spec:
                   value: "{{inputs.parameters.dataName}}"
                 - name: jobIndex
                   value: "{{item.jobIndex}}"
-                #     - name: firstFile
-                #       value: "{{item.firstfile}}"
-                #     - name: lastFile
-                #       value: "{{item.lastfile}}"
                 - name: eventsInJob
                   value: "{{item.eventsinjob}}"
+                - name: conditionsGenSimReco
+                  value: "{{tasks.define-parameters.outputs.parameters.conditionsGenSimReco}}"
+                - name: beamspot
+                  value: "{{tasks.define-parameters.outputs.parameters.beamspot}}"
             withParam: "{{tasks.divide-jobs.outputs.result}}"
 
           - name: pre-digi2raw
@@ -95,10 +103,6 @@ spec:
                   value: "{{inputs.parameters.bucket}}"
                 - name: dataName
                   value: "{{inputs.parameters.dataName}}"
-                #     - name: firstFile
-                #       value: "{{item.firstfile}}"
-                #     - name: lastFile
-                #       value: "{{item.lastfile}}"
 
           - name: digi2raw
             dependencies: [pre-digi2raw]
@@ -111,12 +115,10 @@ spec:
                   value: "{{inputs.parameters.dataName}}"
                 - name: jobIndex
                   value: "{{item.jobIndex}}"
-                #     - name: firstFile
-                #       value: "{{item.firstfile}}"
-                #     - name: lastFile
-                #       value: "{{item.lastfile}}"
                 - name: eventsInJob
                   value: "{{item.eventsinjob}}"
+                - name: conditionsDigiPatNano
+                  value: "{{tasks.define-parameters.outputs.parameters.conditionsDigiPatNano}}"
             withParam: "{{tasks.divide-jobs.outputs.result}}"
 
           - name: hlt
@@ -130,12 +132,10 @@ spec:
                   value: "{{inputs.parameters.dataName}}"
                 - name: jobIndex
                   value: "{{item.jobIndex}}"
-                #     - name: firstFile
-                #       value: "{{item.firstfile}}"
-                #     - name: lastFile
-                #       value: "{{item.lastfile}}"
                 - name: eventsInJob
                   value: "{{item.eventsinjob}}"
+                - name: conditionsHLT
+                  value: "{{tasks.define-parameters.outputs.parameters.conditionsHLT}}"
             withParam: "{{tasks.divide-jobs.outputs.result}}"
 
           - name: reco
@@ -149,12 +149,10 @@ spec:
                   value: "{{inputs.parameters.dataName}}"
                 - name: jobIndex
                   value: "{{item.jobIndex}}"
-                #     - name: firstFile
-                #       value: "{{item.firstfile}}"
-                #     - name: lastFile
-                #       value: "{{item.lastfile}}"
                 - name: eventsInJob
                   value: "{{item.eventsinjob}}"
+                - name: conditionsGenSimReco
+                  value: "{{tasks.define-parameters.outputs.parameters.conditionsGenSimReco}}"
             withParam: "{{tasks.divide-jobs.outputs.result}}"
 
           - name: pat
@@ -168,12 +166,10 @@ spec:
                   value: "{{inputs.parameters.dataName}}"
                 - name: jobIndex
                   value: "{{item.jobIndex}}"
-                #     - name: firstFile
-                #       value: "{{item.firstfile}}"
-                #     - name: lastFile
-                #       value: "{{item.lastfile}}"
                 - name: eventsInJob
                   value: "{{item.eventsinjob}}"
+                - name: conditionsDigiPatNano
+                  value: "{{tasks.define-parameters.outputs.parameters.conditionsDigiPatNano}}"
             withParam: "{{tasks.divide-jobs.outputs.result}}"
 
           - name: nano
@@ -187,12 +183,10 @@ spec:
                   value: "{{inputs.parameters.dataName}}"
                 - name: jobIndex
                   value: "{{item.jobIndex}}"
-                #     - name: firstFile
-                #       value: "{{item.firstfile}}"
-                #     - name: lastFile
-                #       value: "{{item.lastfile}}"
                 - name: eventsInJob
                   value: "{{item.eventsinjob}}"
+                - name: conditionsDigiPatNano
+                  value: "{{tasks.define-parameters.outputs.parameters.conditionsDigiPatNano}}"
             withParam: "{{tasks.divide-jobs.outputs.result}}"
 
     - name: divide-jobs-template
@@ -222,23 +216,56 @@ spec:
           itlist = [i for i in range(1, nJobs+1)]
           dictlist = []
           for i in itlist:
-          #   first = 1+splits[i-1][0]
-          #   last = 1+splits[i-1][len(splits[i-1])-1]
             adict = { "jobIndex": i,
-          #             "firstfile": first,
-          #             "lastfile":  last,
                       "eventsinjob": eventsInJob}
             if i == nJobs:
               adict = { "jobIndex": i,
-          #               "firstfile": first,
-          #               "lastfile":  last,
                         "eventsinjob": eventsInJob + modEvents}
             dictlist.append(adict)
 
-          # adict = { "jobIndex": 1,
-          #           "eventsinjob": eventsInJob}
-
           json.dump(dictlist, sys.stdout)
+
+    - name: define-parameters-template
+      inputs:
+        parameters:
+          - name: runYear
+      outputs:
+        parameters:
+          - name: conditionsGenSimReco
+            valueFrom:
+              path: /tmp/params/conditionsGenSimReco
+          - name: conditionsDigiPatNano
+            valueFrom:
+              path: /tmp/params/conditionsDigiPatNano
+          - name: conditionsHLT
+            valueFrom:
+              path: /tmp/params/conditionsHLT
+          - name: beamspot
+            valueFrom:
+              path: /tmp/params/beamspot
+
+      script:
+        image: python:3.11-slim
+        command: [python]
+        source: |
+          import json, os
+
+          ALL_CONDS = {"2016": {"conditionsGenSimReco": "106X_mcRun2_asymptotic_v13", "conditionsDigiPatNano": "106X_mcRun2_asymptotic_v17", "conditionsHLT": "80X_mcRun2_asymptotic_2016_TrancheIV_v6", "beamspot": "Realistic25ns13TeV2016Collision"},
+            "2015": {"conditionsGenSimReco": "106X_mcRun2_asymptotic_v13", "conditionsDigiPatNano": "106X_mcRun2_asymptotic_v17", "conditionsHLT": "80X_mcRun2_asymptotic_2016_TrancheIV_v6", "beamspot": "Realistic25ns13TeV2016Collision"}
+            # Add other years here
+          }
+          # To-do: 2015 is only a mock runYear in ALL_CONDS, check what are the conds for that year for real
+
+          SELECTED_CONDS = ALL_CONDS.get("{{inputs.parameters.runYear}}")
+
+          if not SELECTED_CONDS:
+            raise ValueError(f"Unknown runYear {'{{inputs.parameters.runYear}}'}, please add conditions for this runYear in the step define-parameters")
+
+          os.makedirs("/tmp/params", exist_ok=True)
+
+          for key, value in SELECTED_CONDS.items():
+            with open(f"/tmp/params/{key}", "w") as tmp_file:
+              tmp_file.write(str(value))
 
     - name: gen-template
       inputs:
@@ -247,9 +274,9 @@ spec:
           - name: dataName
           - name: fragFileName
           - name: jobIndex
-          # - name: firstFile
-          # - name: lastFile
           - name: eventsInJob
+          - name: conditionsGenSimReco
+          - name: beamspot
 
         artifacts:
           - name: GEN-config
@@ -307,9 +334,6 @@ spec:
 
           mkdir -p Configuration/GenProduction/python
 
-          echo "Contents of ../Configuration/GenProduction/python"
-          echo $(ls ../Configuration/GenProduction/python)
-
           scram b
 
           # Make a dir where all the different jobs store the .root output files from this step
@@ -321,14 +345,17 @@ spec:
           OUTPUT_FILE=GEN/{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
+          CONDITIONS={{inputs.parameters.conditionsGenSimReco}} # 106X_mcRun2_asymptotic_v13
+          BEAMSPOT={{inputs.parameters.beamspot}} # Realistic25ns13TeV2016Collision
 
           cmsDriver.py Configuration/GenProduction/python/fragments.py --python_filename $PYTHON_FILENAME --eventcontent RAWSIM \
           --customise Configuration/DataProcessing/Utils.addMonitoring --datatier GEN --fileout file:$OUTPUT_FILE \
-          --conditions 106X_mcRun2_asymptotic_v13 --beamspot Realistic25ns13TeV2016Collision \
+          --conditions $CONDITIONS --beamspot $BEAMSPOT \
           --customise_commands process.source.numberEventsInLuminosityBlock="cms.untracked.uint32(100)" --step GEN \
           --geometry DB:Extended --era Run2_2016 --no_exec --mc -n $EVENTS
 
           # To-do: find out what to do with the numberEventsInLuminosityBlock ^
+          # some datasets have it 100, some have it 2500 or something
 
           # For now the LHAPDF does not work, comment that line out in the config
           sed -i '/LHAPDF/s/^/#/g' $PYTHON_FILENAME
@@ -348,10 +375,12 @@ spec:
           - name: dataName
           - name: jobIndex
           - name: eventsInJob
+          - name: conditionsGenSimReco
+          - name: beamspot
 
         artifacts:
           - name: GEN-root
-            path: /code/CMSSW_10_6_30/src/GEN # polku missa tiedosto on kontissa
+            path: /code/CMSSW_10_6_30/src/GEN
             archive:
               none: {}
             s3:
@@ -365,7 +394,7 @@ spec:
                 name: s3-credentials
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/GEN # path where it stays in the cloud storage
+              key: FullSim/{{inputs.parameters.dataName}}/GEN
 
       outputs:
         artifacts:
@@ -384,7 +413,7 @@ spec:
                 name: s3-credentials
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/SIM # path where it stays in the cloud storage
+              key: FullSim/{{inputs.parameters.dataName}}/SIM
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
@@ -409,14 +438,19 @@ spec:
           INPUT_FILE=GEN/{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
+          CONDITIONS={{inputs.parameters.conditionsGenSimReco}} # 106X_mcRun2_asymptotic_v13
+          BEAMSPOT={{inputs.parameters.beamspot}} # Realistic25ns13TeV2016Collision
 
           cmsDriver.py --python_filename $PYTHON_FILENAME --eventcontent RAWSIM \
           --customise Configuration/DataProcessing/Utils.addMonitoring --datatier GEN-SIM \
-          --fileout file:$OUTPUT_FILE --conditions 106X_mcRun2_asymptotic_v13 --beamspot Realistic25ns13TeV2016Collision \
+          --fileout file:$OUTPUT_FILE --conditions $CONDITIONS --beamspot $BEAMSPOT \
           --step SIM --geometry DB:Extended --filein file:$INPUT_FILE --era Run2_2016 --runUnscheduled --no_exec --mc -n $EVENTS
 
           REPORT_NAME=SIM/report.xml
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
+
+          # Delete files from object storage that are useless now
+          # Comment out this part of the script, if you want to look at the files different steps create
 
     - name: pre-digi2raw-template
       inputs:
@@ -441,7 +475,7 @@ spec:
                 name: s3-credentials
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/pileup_file_list.txt # path where it stays in the cloud storage
+              key: FullSim/{{inputs.parameters.dataName}}/pileup_file_list.txt
 
       script:
         image: cernopendata/cernopendata-client
@@ -457,7 +491,8 @@ spec:
           - name: dataName
           - name: jobIndex
           - name: eventsInJob
-          #- name: nPileupFiles # To-do: make handling of totEvents to nPileupFiles
+          - name: conditionsDigiPatNano
+
         artifacts:
           - name: pileup_file_list
             path: /code/CMSSW_10_6_30/src/pileup_file_list.txt
@@ -474,7 +509,7 @@ spec:
                 name: s3-credentials
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/pileup_file_list.txt # path where it stays in the cloud storage
+              key: FullSim/{{inputs.parameters.dataName}}/pileup_file_list.txt
 
           - name: SIM-root
             path: /code/CMSSW_10_6_30/src/SIM
@@ -491,7 +526,7 @@ spec:
                 name: s3-credentials
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/SIM # path where it stays in the cloud storage
+              key: FullSim/{{inputs.parameters.dataName}}/SIM
 
       outputs:
         artifacts:
@@ -510,7 +545,7 @@ spec:
                 name: s3-credentials
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/DIGIPremix # path where it stays in the cloud storage
+              key: FullSim/{{inputs.parameters.dataName}}/DIGIPremix
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
@@ -535,14 +570,14 @@ spec:
           INPUT_FILE=SIM/{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
-          # To-do: Check how it works with multiple files, now nPileupFiles is always 1 --> affects --pileup_input argument in cmsDriver
-          # TO-do:
-          mapfile -n 1 SELECTED_PILEUP_FILES < pileup_file_list.txt
+          CONDITIONS={{inputs.parameters.conditionsDigiPatNano}}
+
+          mapfile -n {{inputs.parameters.jobIndex}} SELECTED_PILEUP_FILES < pileup_file_list.txt
 
           cmsDriver.py --python_filename $PYTHON_FILENAME --eventcontent PREMIXRAW \
           --customise Configuration/DataProcessing/Utils.addMonitoring --datatier GEN-SIM-DIGI \
-          --fileout file:$OUTPUT_FILE --pileup_input ${SELECTED_PILEUP_FILES[0]} \
-          --datamix PreMix --procModifiers premix_stage2 --conditions 106X_mcRun2_asymptotic_v17 --step DIGI,DATAMIX,L1,DIGI2RAW \
+          --fileout file:$OUTPUT_FILE --pileup_input ${SELECTED_PILEUP_FILES[{{inputs.parameters.jobIndex}} - 1]} \
+          --datamix PreMix --procModifiers premix_stage2 --conditions $CONDITIONS --step DIGI,DATAMIX,L1,DIGI2RAW \
           --geometry DB:Extended --filein file:$INPUT_FILE --era Run2_2016 --runUnscheduled --no_exec --mc -n $EVENTS
 
           REPORT_NAME=DIGIPremix/report.xml
@@ -555,6 +590,7 @@ spec:
           - name: dataName
           - name: jobIndex
           - name: eventsInJob
+          - name: conditionsHLT
 
         artifacts:
           - name: DIGIPremix-root
@@ -616,12 +652,14 @@ spec:
           INPUT_FILE=DIGIPremix/{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
+          CONDITIONS={{inputs.parameters.conditionsHLT}}
+
           cmsDriver.py --python_filename $PYTHON_FILENAME --eventcontent RAWSIM \
           --outputCommand "keep *_mix_*_*,keep *_genPUProtons_*_*" \
           --customise Configuration/DataProcessing/Utils.addMonitoring --datatier GEN-SIM-RAW \
           --inputCommands "keep *","drop *_*_BMTF_*","drop *PixelFEDChannel*_*_*_*" \
           --fileout file:$OUTPUT_FILE --customise_commands 'process.source.bypassVersionCheck = cms.untracked.bool(True)' \
-          --step HLT:25ns15e33_v4 --conditions 80X_mcRun2_asymptotic_2016_TrancheIV_v6 \
+          --step HLT:25ns15e33_v4 --conditions $CONDITIONS \
           --geometry DB:Extended --filein file:$INPUT_FILE --era Run2_2016 --no_exec --mc -n $EVENTS
 
           REPORT_NAME=DIGIPremix/report.xml
@@ -634,6 +672,8 @@ spec:
           - name: dataName
           - name: jobIndex
           - name: eventsInJob
+          - name: conditionsGenSimReco
+
         artifacts:
           - name: HLT-root
             path: /code/CMSSW_10_6_30/src/HLT
@@ -695,9 +735,11 @@ spec:
           INPUT_FILE=HLT/{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
+          CONDITIONS={{inputs.parameters.conditionsGenSimReco}}
+
           cmsDriver.py --python_filename $PYTHON_FILENAME --eventcontent AODSIM \
           --customise Configuration/DataProcessing/Utils.addMonitoring --datatier AODSIM --fileout file:$OUTPUT_FILE \
-          --conditions 106X_mcRun2_asymptotic_v13 --step RAW2DIGI,L1Reco,RECO,RECOSIM --geometry DB:Extended \
+          --conditions $CONDITIONS --step RAW2DIGI,L1Reco,RECO,RECOSIM --geometry DB:Extended \
           --filein file:$INPUT_FILE --era Run2_2016 --runUnscheduled --no_exec --mc -n $EVENTS
 
           REPORT_NAME=RECO/report.xml
@@ -711,6 +753,8 @@ spec:
           - name: dataName
           - name: jobIndex
           - name: eventsInJob
+          - name: conditionsDigiPatNano
+
         artifacts:
           - name: RECO-root
             path: /code/CMSSW_10_6_30/src/RECO
@@ -771,9 +815,11 @@ spec:
           INPUT_FILE=RECO/{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
+          CONDITIONS={{inputs.parameters.conditionsDigiPatNano}}
+
           cmsDriver.py --python_filename $PYTHON_FILENAME --eventcontent MINIAODSIM \
           --customise Configuration/DataProcessing/Utils.addMonitoring --datatier MINIAODSIM --fileout file:$OUTPUT_FILE \
-          --conditions 106X_mcRun2_asymptotic_v17 --step PAT --procModifiers run2_miniAOD_UL --geometry DB:Extended \
+          --conditions $CONDITIONS --step PAT --procModifiers run2_miniAOD_UL --geometry DB:Extended \
           --filein file:$INPUT_FILE --era Run2_2016 --runUnscheduled --no_exec --mc -n $EVENTS
 
           REPORT_NAME=PAT/report.xml
@@ -787,6 +833,8 @@ spec:
           - name: dataName
           - name: jobIndex
           - name: eventsInJob
+          - name: conditionsDigiPatNano
+
         artifacts:
           - name: PAT-root
             path: /code/CMSSW_10_6_30/src/PAT
@@ -847,9 +895,11 @@ spec:
           INPUT_FILE=PAT/{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
-          cmsDriver.py --python_filename $PYTHON_FILENAME --eventcontent NANOEDMAODSIM \
+          CONDITIONS={{inputs.parameters.conditionsDigiPatNano}}
+
+          cmsDriver.py --python_filename $PYTHON_FILENAME --eventcontent NANOAODSIM \
           --customise Configuration/DataProcessing/Utils.addMonitoring --datatier NANOAODSIM \
-          --fileout file:$OUTPUT_FILE --conditions 106X_mcRun2_asymptotic_v17 --step NANO \
+          --fileout file:$OUTPUT_FILE --conditions $CONDITIONS --step NANO \
           --filein file:$INPUT_FILE --era Run2_2016,run2_nanoAOD_106Xv2 --no_exec --mc -n $EVENTS
 
           cmsRun $PYTHON_FILENAME
