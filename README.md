@@ -67,5 +67,5 @@ swift list your_storage --prefix FullSim/your_dataset_name/NANO
 
 Download output files locally if needed
 ```
-swift download mirastorage --prefix FullSim/your_dataset_name/NANO --output-dir results
+swift download your_storage --prefix FullSim/your_dataset_name/NANO --output-dir results
 ```
