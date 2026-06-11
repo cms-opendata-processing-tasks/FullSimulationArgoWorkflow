@@ -30,7 +30,7 @@ spec:
       - name: bucket
         value: your_storage
       - name: dataName
-        value: "parallel-testing"
+        value: "your_dataset_name"
       - name: fragFileName
         value: "fragments.py"
       - name: totEvents
@@ -38,7 +38,7 @@ spec:
       - name: nJobs
         value: 3
 ```
-check that these parameters have correct values that are set according to you situation
+check that these parameters have correct values that are set according to you situation especially your_dataset_name and your_storage
 
 5. Submit the workflow to the cluster
 ```
