@@ -1,1 +1,6 @@
 memoryscan/
+start_memory_scan.sh
+memory_plot.py
+venv/
+*kubeconfig
+*openrc.sh
