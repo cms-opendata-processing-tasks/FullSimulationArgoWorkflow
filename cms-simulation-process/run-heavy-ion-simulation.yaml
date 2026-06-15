@@ -1,0 +1,276 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: simulation-process-
+spec:
+  entrypoint: cms-full-sim
+  serviceAccountName: argo-service-account
+
+  arguments:
+    parameters:
+      - name: bucket
+        value: mirastorage
+      - name: dataName
+        value: "heavy-ion-1"
+      - name: fragFileName
+        value: "fragments.py"
+      - name: totEvents
+        value: 320
+      - name: nJobs
+        value: 2
+      - name: runYear
+        value: "2013" # default is that the run is 2013
+      # - name: reactionType
+      # value: "pp" # or #pPb
+
+  templates:
+    - name: cms-full-sim # to-do: change name
+      inputs:
+        parameters:
+          - name: bucket
+          - name: dataName
+          - name: fragFileName
+          - name: totEvents
+          - name: nJobs
+          - name: runYear
+
+      dag:
+        tasks:
+          - name: divide-jobs
+            template: divide-jobs-template
+            arguments:
+              parameters:
+                - name: bucket
+                  value: "{{inputs.parameters.bucket}}"
+                - name: dataName
+                  value: "{{inputs.parameters.dataName}}"
+                - name: totEvents
+                  value: "{{inputs.parameters.totEvents}}"
+                - name: nJobs
+                  value: "{{inputs.parameters.nJobs}}"
+
+          - name: define-parameters
+            template: define-parameters-template
+            arguments:
+              parameters:
+                - name: runYear
+                  value: "{{inputs.parameters.runYear}}"
+                  # To-do: Does HeavyIon have different 2016 run conditions?
+
+          - name: gen-sim
+            dependencies: [divide-jobs, define-parameters]
+            template: gen-sim-template
+            arguments:
+              parameters:
+                - name: bucket
+                  value: "{{inputs.parameters.bucket}}"
+                - name: dataName
+                  value: "{{inputs.parameters.dataName}}"
+                - name: fragFileName
+                  value: "{{inputs.parameters.fragFileName}}"
+                - name: jobIndex
+                  value: "{{item.jobIndex}}"
+                - name: eventsInJob
+                  value: "{{item.eventsinjob}}"
+                - name: conditionsGenSim
+                  value: "{{tasks.define-parameters.outputs.parameters.conditionsGenSim}}" # To-do: better handling than array --> sh does not have object or dict datatype
+                - name: beamspot
+                  value: "{{tasks.define-parameters.outputs.parameters.beamspot}}"
+            withParam: "{{tasks.divide-jobs.outputs.result}}"
+
+          - name: hlt-reco
+            dependencies: [gen-sim]
+            template: hlt-reco-template
+            arguments:
+              parameters:
+                - name: bucket
+                  value: "{{inputs.parameters.bucket}}"
+                - name: dataName
+                  value: "{{inputs.parameters.dataName}}"
+                - name: jobIndex
+                  value: "{{item.jobIndex}}"
+                - name: eventsInJob
+                  value: "{{item.eventsinjob}}"
+                - name: conditionsGenSim
+                  value: "{{tasks.define-parameters.outputs.parameters.conditionsGenSim}}"
+                - name: beamspot
+                  value: "{{tasks.define-parameters.outputs.parameters.beamspot}}"
+            withParam: "{{tasks.divide-jobs.outputs.result}}"
+
+    - name: divide-jobs-template
+      inputs:
+        parameters:
+          - name: bucket
+          - name: dataName
+          - name: totEvents
+          - name: nJobs
+      script:
+        image: python:alpine3.6
+        command: [python]
+        source: |
+          import json
+          import sys
+          def split(a, n):
+            k, m = divmod(len(a), n)
+            return (a[i*k+min(i, m):(i+1)*k+min(i+1, m)] for i in range(n))
+          nJobs = {{inputs.parameters.nJobs}}
+          totEvents = {{inputs.parameters.totEvents}}
+          modEvents = 0
+          eventsInJob = -1
+          if totEvents > 0:
+            eventsInJob = int(totEvents/nJobs)
+            modEvents = totEvents % nJobs
+          splits= list(split(range(totEvents),nJobs))
+          itlist = [i for i in range(1, nJobs+1)]
+          dictlist = []
+          for i in itlist:
+            adict = { "jobIndex": i,
+                      "eventsinjob": eventsInJob}
+            if i == nJobs:
+              adict = { "jobIndex": i,
+                        "eventsinjob": eventsInJob + modEvents}
+            dictlist.append(adict)
+
+          json.dump(dictlist, sys.stdout)
+
+    - name: define-parameters-template
+      inputs:
+        parameters:
+          - name: runYear
+      outputs:
+        parameters:
+          - name: conditionsGenSim
+            valueFrom:
+              path: /tmp/params/conditionsGenSim
+          - name: conditionsHLTReco
+            valueFrom:
+              path: /tmp/params/conditionsHLTReco
+          - name: beamspot
+            valueFrom:
+              path: /tmp/params/beamspot
+
+      script:
+        image: python:3.11-slim
+        command: [python]
+        source: |
+          import json, os
+
+          key = "{{inputs.parameters.runYear}}" + "{{inputs.parameters.reactionType}}"
+
+          ALL_CONDS = {"2013pp": {"conditionsGenSim": "STARTHI53_V28::All", "conditionsHLTReco": "STARTHI53_V28::All", "beamspot": "Realistic2p76TeV2013Collision"},
+            "2013pPb": {"conditionsGenSim": "STARTHI53_V28::All", "conditionsHLTReco": "STARTHI53_V28::All", "beamspot": "Realistic8TeVCollisionPPbBoost"
+          }
+          # To-do: how to handle other years?
+
+          SELECTED_CONDS = ALL_CONDS.get(f"{key}")
+
+          if not SELECTED_CONDS:
+            raise ValueError(f"Unknown runYear {'{{inputs.parameters.runYear}}'}, please add conditions for this runYear in the step define-parameters")
+
+          os.makedirs("/tmp/params", exist_ok=True)
+
+          for key, value in SELECTED_CONDS.items():
+            with open(f"/tmp/params/{key}", "w") as tmp_file:
+              tmp_file.write(str(value))
+
+    - name: gen-sim-template
+      inputs:
+        parameters:
+          - name: bucket
+          - name: dataName
+          - name: fragFileName
+          - name: jobIndex
+          - name: eventsInJob
+          - name: conditionsGenSim
+          - name: beamspot
+
+        artifacts:
+          - name: GEN-config
+            path: /code/CMSSW_10_6_30/src/Configuration/GenProduction/python/fragments.py # path for file in container
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1 # placeholder, To-do
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/{{inputs.parameters.fragFileName}} # path where it stays in the cloud storage
+
+      outputs:
+        artifacts:
+          - name: GEN-SIM-root
+            path: /code/CMSSW_10_6_30/src/GEN-SIM
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1 # placeholder, To-do
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/GEN # path where it stays in the cloud storage
+
+      script:
+        image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
+        command: [bash]
+        source: |
+          # write script here
+
+          # Init first with sudo and then cmsusr
+          echo "Initializing cmsenv"
+          sudo --preserve-env=CMS_INSTALL_DIR,CMSSW_VERSION,SCRAM_ARCH /opt/cms/entrypoint.sh
+          source /opt/cms/entrypoint.sh
+
+          cd /code/CMSSW_10_6_30/src/
+
+          # To-do: Hi simulation needs gridpacks that are not in the cmssw container natively
+
+          echo "Changing ownership"
+          sudo chown -R cmsusr:cmsusr /code/CMSSW_10_6_30
+          echo "Now in" $(pwd)
+
+          mkdir -p Configuration/GenProduction/python
+
+          scram b
+
+          # Make a dir where all the different jobs store the .root output files from this step
+          # --> this dir is mounted in the cloud storage
+
+          mkdir GEN-SIM
+
+          PYTHON_FILENAME=GEN-SIM/GEN-SIM_cfg.py
+          OUTPUT_FILE=GEN-SIM/{{inputs.parameters.jobIndex}}.root
+          EVENTS={{inputs.parameters.eventsInJob}}
+
+          CONDITIONS={{inputs.parameters.conditionsGenSim}} # STARTHI53_V28::All or START53_V10::All --> Is it possible to just use the "latest" for everything
+          BEAMSPOT={{inputs.parameters.beamspot}} # Realistic2p76TeV2013Collision (pp) or Realistic8TeVCollisionPPbBoost (pPb)
+
+          cmsDriver.py Configuration/GenProduction/python/fragments.py --python_filename $PYTHON_FILENAME --eventcontent RAWSIM \
+          --pileup NoPileUp --customise Configuration/DataProcessing/Utils.addMonitoring --datatier GEN-SIM --fileout file:$OUTPUT_FILE \
+          --conditions $CONDITIONS --beamspot $BEAMSPOT --step GEN,SIM \
+          --datamix NODATAMIXER --no_exec --mc -n $EVENTS
+
+          # To-do: find out what to do with the numberEventsInLuminosityBlock ^
+          # some datasets have it 100, some have it 2500 or something
+
+          # For now the LHAPDF does not work, comment that line out in the config
+          sed -i '/LHAPDF/s/^/#/g' $PYTHON_FILENAME
+
+          # To-do: figure out if reports are necessary and make them jobIndex specific
+          REPORT_NAME=GEN-SIM/report.xml
+
+          cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
+        #resources:
+        #  requests:
+        #    cpu: "2"
