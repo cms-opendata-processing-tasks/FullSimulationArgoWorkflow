@@ -15,7 +15,7 @@ spec:
       - name: fragFileName
         value: "fragments.py"
       - name: totEvents
-        value: 320
+        value: 32
       - name: nJobs
         value: 2
       - name: runYear
@@ -368,11 +368,29 @@ spec:
           # To-do: find out what to do with the numberEventsInLuminosityBlock ^
           # some datasets have it 100, some have it 2500 or something
 
-          # For now the LHAPDF does not work, comment that line out in the config
-          sed -i '/LHAPDF/s/^/#/g' $PYTHON_FILENAME
+          # In the generated python file, find which LHAPDF set is needed
+          # To-do: this works if only one LHAPDF set is needed and it is configured exactly like this
+          LHAPDF_SET_NAME="$(grep -oP "PDF:pSet=LHAPDF6:\K.*?(?=')" $PYTHON_FILENAME)"
+          #LHAPDF_SET_NAME="NNPDF31_nnlo_as_0118"
+
+          cd $LHAPDF_DATA_PATH
+          sudo rm -r $LHAPDF_SET_NAME
+
+          echo "in $LHAPDF_DATA_PATH"
+
+          sudo wget 'https://lhapdfsets.web.cern.ch/current/'"${LHAPDF_SET_NAME}"'.tar.gz'
+          sudo tar xf "$LHAPDF_SET_NAME"'.tar.gz'
+          sudo chown -R cmsinst:cmsinst .
+          sudo rm -r "$LHAPDF_SET_NAME"'.tar.gz'
+
+          echo "Did LHAPDF installation"
+
+          cd /code/CMSSW_10_6_30/src/
 
           # To-do: figure out if reports are necessary and make them jobIndex specific
           REPORT_NAME=GEN/report.xml
+
+          echo "Starting cmsrun"
 
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
         #resources:
