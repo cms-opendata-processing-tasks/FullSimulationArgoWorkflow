@@ -15,7 +15,7 @@ spec:
         value: "my-dataset"
       ### EDIT BELOW: replace the placeholder 'fragments.py' with the file name of your fragment
       - name: fragFileName
-        value: "placeholder.py"
+        value: "fragments.py"
       ### EDIT BELOW: replace the placeholder '10' with the amount of events you want to process
       - name: totEvents
         value: 10
