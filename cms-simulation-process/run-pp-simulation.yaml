@@ -8,21 +8,26 @@ spec:
 
   arguments:
     parameters:
+      ### EDIT BELOW: replace the placeholder 'mirastorage' with your object storage name
       - name: bucket
         value: mirastorage
       - name: dataName
-        value: "parallel-testing"
+        value: "my-dataset"
+      ### EDIT BELOW: replace the placeholder 'fragments.py' with the file name of your fragment
       - name: fragFileName
-        value: "fragments.py"
+        value: "placeholder.py"
+      ### EDIT BELOW: replace the placeholder '10' with the amount of events you want to process
       - name: totEvents
-        value: 32
+        value: 10
+      ### EDIT BELOW: replace the placeholder '1' with 4 times the amount of nodes on your cluster e.g. 4 times 2 nodes --> nJobs is 8
       - name: nJobs
-        value: 2
+        value: 1
+      ### EDIT BELOW: replace the placeholder '2016' with the year of the run you are simulating
       - name: runYear
-        value: "2016" # default is that the run is 2016
+        value: "2016"
 
   templates:
-    - name: cms-full-sim # to-do: change name
+    - name: cms-full-sim
       inputs:
         parameters:
           - name: bucket
@@ -53,7 +58,6 @@ spec:
               parameters:
                 - name: runYear
                   value: "{{inputs.parameters.runYear}}"
-                  # To-do: Does HeavyIon have different 2016 run conditions?
 
           - name: gen
             dependencies: [divide-jobs, define-parameters]
@@ -71,7 +75,7 @@ spec:
                 - name: eventsInJob
                   value: "{{item.eventsinjob}}"
                 - name: conditionsGenSimReco
-                  value: "{{tasks.define-parameters.outputs.parameters.conditionsGenSimReco}}" # To-do: better handling than array --> sh does not have object or dict datatype
+                  value: "{{tasks.define-parameters.outputs.parameters.conditionsGenSimReco}}"
                 - name: beamspot
                   value: "{{tasks.define-parameters.outputs.parameters.beamspot}}"
             withParam: "{{tasks.divide-jobs.outputs.result}}"
@@ -310,7 +314,7 @@ spec:
       outputs:
         artifacts:
           - name: GEN-root
-            path: /code/CMSSW_10_6_30/src/GEN
+            path: /code/CMSSW_10_6_30/src/GEN/{{inputs.parameters.jobIndex}}.root
             archive:
               none: {}
             s3:
@@ -324,7 +328,7 @@ spec:
                 name: s3-credentials
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/GEN # path where it stays in the cloud storage
+              key: FullSim/{{inputs.parameters.dataName}}/GEN/{{inputs.parameters.jobIndex}}.root # path where it stays in the cloud storage
 
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
@@ -409,7 +413,7 @@ spec:
 
         artifacts:
           - name: GEN-root
-            path: /code/CMSSW_10_6_30/src/GEN
+            path: /code/CMSSW_10_6_30/src/GEN/{{inputs.parameters.jobIndex}}.root
             archive:
               none: {}
             s3:
@@ -423,12 +427,12 @@ spec:
                 name: s3-credentials
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/GEN
+              key: FullSim/{{inputs.parameters.dataName}}/GEN/{{inputs.parameters.jobIndex}}.root
 
       outputs:
         artifacts:
           - name: SIM-root
-            path: /code/CMSSW_10_6_30/src/SIM
+            path: /code/CMSSW_10_6_30/src/SIM/{{inputs.parameters.jobIndex}}.root
             archive:
               none: {}
             s3:
@@ -442,7 +446,7 @@ spec:
                 name: s3-credentials
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/SIM
+              key: FullSim/{{inputs.parameters.dataName}}/SIM/{{inputs.parameters.jobIndex}}.root
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
@@ -541,7 +545,7 @@ spec:
               key: FullSim/{{inputs.parameters.dataName}}/pileup_file_list.txt
 
           - name: SIM-root
-            path: /code/CMSSW_10_6_30/src/SIM
+            path: /code/CMSSW_10_6_30/src/SIM/{{inputs.parameters.jobIndex}}.root
             archive:
               none: {}
             s3:
@@ -555,12 +559,12 @@ spec:
                 name: s3-credentials
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/SIM
+              key: FullSim/{{inputs.parameters.dataName}}/SIM/{{inputs.parameters.jobIndex}}.root
 
       outputs:
         artifacts:
           - name: DIGI2RAW-root
-            path: /code/CMSSW_10_6_30/src/DIGIPremix
+            path: /code/CMSSW_10_6_30/src/DIGIPremix/{{inputs.parameters.jobIndex}}.root
             archive:
               none: {}
             s3:
@@ -574,7 +578,7 @@ spec:
                 name: s3-credentials
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/DIGIPremix
+              key: FullSim/{{inputs.parameters.dataName}}/DIGIPremix/{{inputs.parameters.jobIndex}}.root
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
@@ -623,7 +627,7 @@ spec:
 
         artifacts:
           - name: DIGIPremix-root
-            path: /code/CMSSW_8_0_33_UL/src/DIGIPremix
+            path: /code/CMSSW_8_0_33_UL/src/DIGIPremix/{{inputs.parameters.jobIndex}}.root
             archive:
               none: {}
             s3:
@@ -637,12 +641,12 @@ spec:
                 name: s3-credentials
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/DIGIPremix # path where it stays in the cloud storage
+              key: FullSim/{{inputs.parameters.dataName}}/DIGIPremix/{{inputs.parameters.jobIndex}}.root # path where it stays in the cloud storage
 
       outputs:
         artifacts:
           - name: HLT-root
-            path: /code/CMSSW_8_0_33_UL/src/HLT
+            path: /code/CMSSW_8_0_33_UL/src/HLT/{{inputs.parameters.jobIndex}}.root
             archive:
               none: {}
             s3:
@@ -656,7 +660,7 @@ spec:
                 name: s3-credentials
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/HLT # path where it stays in the cloud storage
+              key: FullSim/{{inputs.parameters.dataName}}/HLT/{{inputs.parameters.jobIndex}}.root # path where it stays in the cloud storage
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker/cmssw_8_0_33_ul-slc7_amd64_gcc530
         command: [bash]
@@ -705,7 +709,7 @@ spec:
 
         artifacts:
           - name: HLT-root
-            path: /code/CMSSW_10_6_30/src/HLT
+            path: /code/CMSSW_10_6_30/src/HLT/{{inputs.parameters.jobIndex}}.root
             archive:
               none: {}
             s3:
@@ -719,12 +723,12 @@ spec:
                 name: s3-credentials
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/HLT # path where it stays in the cloud storage
+              key: FullSim/{{inputs.parameters.dataName}}/HLT/{{inputs.parameters.jobIndex}}.root # path where it stays in the cloud storage
 
       outputs:
         artifacts:
           - name: RECO-root
-            path: /code/CMSSW_10_6_30/src/RECO
+            path: /code/CMSSW_10_6_30/src/RECO/{{inputs.parameters.jobIndex}}.root
             archive:
               none: {}
             s3:
@@ -738,7 +742,7 @@ spec:
                 name: s3-credentials
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/RECO
+              key: FullSim/{{inputs.parameters.dataName}}/RECO/{{inputs.parameters.jobIndex}}.root
 
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
@@ -786,7 +790,7 @@ spec:
 
         artifacts:
           - name: RECO-root
-            path: /code/CMSSW_10_6_30/src/RECO
+            path: /code/CMSSW_10_6_30/src/RECO/{{inputs.parameters.jobIndex}}.root
             archive:
               none: {}
             s3:
@@ -800,11 +804,11 @@ spec:
                 name: s3-credentials
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/RECO
+              key: FullSim/{{inputs.parameters.dataName}}/RECO/{{inputs.parameters.jobIndex}}.root
       outputs:
         artifacts:
           - name: PAT-root
-            path: /code/CMSSW_10_6_30/src/PAT
+            path: /code/CMSSW_10_6_30/src/PAT/{{inputs.parameters.jobIndex}}.root
             archive:
               none: {}
             s3:
@@ -818,7 +822,7 @@ spec:
                 name: s3-credentials
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/PAT
+              key: FullSim/{{inputs.parameters.dataName}}/PAT/{{inputs.parameters.jobIndex}}.root
 
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
@@ -866,7 +870,7 @@ spec:
 
         artifacts:
           - name: PAT-root
-            path: /code/CMSSW_10_6_30/src/PAT
+            path: /code/CMSSW_10_6_30/src/PAT/{{inputs.parameters.jobIndex}}.root
             archive:
               none: {}
             s3:
@@ -880,7 +884,7 @@ spec:
                 name: s3-credentials
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/PAT
+              key: FullSim/{{inputs.parameters.dataName}}/PAT/{{inputs.parameters.jobIndex}}.root
       outputs:
         artifacts:
           - name: NANO-root
@@ -898,7 +902,7 @@ spec:
                 name: s3-credentials
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/NANO
+              key: FullSim/{{inputs.parameters.dataName}}/NANO/{{inputs.parameters.jobIndex}}.root
 
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
