@@ -25,6 +25,9 @@ spec:
       ### EDIT BELOW: replace the placeholder '2016' with the year of the run you are simulating
       - name: runYear
         value: "2016"
+      ### EDIT BELOW: If you have already completed the LHE GEN step change the boolean to true
+      - name: startFromSim
+        value: true
 
   templates:
     - name: cms-full-sim
@@ -36,6 +39,7 @@ spec:
           - name: totEvents
           - name: nJobs
           - name: runYear
+          - name: startFromSim
 
       dag:
         tasks:
@@ -62,6 +66,7 @@ spec:
           - name: gen
             dependencies: [divide-jobs, define-parameters]
             template: gen-template
+            when: "{{inputs.parameters.startFromSim}} == false"
             arguments:
               parameters:
                 - name: bucket
@@ -397,6 +402,7 @@ spec:
           echo "Starting cmsrun"
 
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
+          
         #resources:
         #  requests:
         #    cpu: "2"
@@ -888,7 +894,7 @@ spec:
       outputs:
         artifacts:
           - name: NANO-root
-            path: /code/CMSSW_10_6_30/src/NANO
+            path: /code/CMSSW_10_6_30/src/NANO/{{inputs.parameters.jobIndex}}
             archive:
               none: {}
             s3:
