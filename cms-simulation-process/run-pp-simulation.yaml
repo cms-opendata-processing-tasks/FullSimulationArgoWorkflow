@@ -403,9 +403,10 @@ spec:
 
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
           
-        #resources:
-        #  requests:
-        #    cpu: "2"
+        resources:
+          requests:
+            cpu: "600m"
+            memory: "2Gi"
 
     - name: sim-template
       inputs:
@@ -490,6 +491,10 @@ spec:
 
           # Delete files from object storage that are useless now
           # Comment out this part of the script, if you want to look at the files different steps create
+        resources:
+          requests:
+            cpu: "600m"
+            memory: "2Gi"
 
     - name: pre-digi2raw-template
       inputs:
@@ -622,6 +627,11 @@ spec:
           REPORT_NAME=DIGIPremix/report.xml
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
 
+        resources:
+          requests:
+            cpu: "600m"
+            memory: "2Gi"
+
     - name: hlt-template
       inputs:
         parameters:
@@ -704,6 +714,11 @@ spec:
           REPORT_NAME=DIGIPremix/report.xml
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
 
+        resources:
+          requests:
+            cpu: "600m"
+            memory: "2Gi"
+
     - name: reco-template
       inputs:
         parameters:
@@ -784,6 +799,11 @@ spec:
           REPORT_NAME=RECO/report.xml
 
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
+        
+        resources:
+          requests:
+            cpu: "600m"
+            memory: "2Gi"
 
     - name: pat-template
       inputs:
@@ -864,6 +884,11 @@ spec:
           REPORT_NAME=PAT/report.xml
 
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
+        
+        resources:
+          requests:
+            cpu: "600m"
+            memory: "2Gi"
 
     - name: nano-template
       inputs:
@@ -894,7 +919,7 @@ spec:
       outputs:
         artifacts:
           - name: NANO-root
-            path: /code/CMSSW_10_6_30/src/NANO/{{inputs.parameters.jobIndex}}
+            path: /code/CMSSW_10_6_30/src/NANO/{{inputs.parameters.jobIndex}}.root
             archive:
               none: {}
             s3:
@@ -942,6 +967,11 @@ spec:
           --filein file:$INPUT_FILE --era Run2_2016,run2_nanoAOD_106Xv2 --no_exec --mc -n $EVENTS
 
           cmsRun $PYTHON_FILENAME
+
+        resources:
+          requests:
+            cpu: "600m"
+            memory: "2Gi"
 
     - name: validate-template
       inputs:
