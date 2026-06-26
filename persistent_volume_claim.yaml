@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: workflow-pvc
+spec:
+  accessModes:
+    - ReadWriteMany # Kokeile voiko tehdä readwrite juttua multiple --> podit kirjottaa yhtäaikaa
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: cinder-sc
+  volumeName: workflow-pv

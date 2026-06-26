@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: workflow-pv
+spec:
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadWriteMany
+  csi:
+    driver: cinder.csi.openstack.org
+    volumeHandle: 3434f8c9-439a-4f4e-b2c2-f99c539bb7b8
+  storageClassName: cinder-sc
+  claimRef:
+    name: workflow-pvc
+    namespace: argo
