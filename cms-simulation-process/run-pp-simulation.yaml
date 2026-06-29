@@ -22,12 +22,15 @@ spec:
       ### EDIT BELOW: replace the placeholder '1' with 4 times the amount of nodes on your cluster e.g. 4 times 2 nodes --> nJobs is 8
       - name: nJobs
         value: 1
+      ### EDIT BELOW: replace the placeholder '2' with the number of nodes in your cluster
+      - name: nNodes
+        value: 2
       ### EDIT BELOW: replace the placeholder '2016' with the year of the run you are simulating
       - name: runYear
         value: "2016"
       ### EDIT BELOW: If you have already completed the LHE GEN step change the boolean to true
       - name: startFromSim
-        value: true
+        value: false
 
   templates:
     - name: cms-full-sim
@@ -40,6 +43,7 @@ spec:
           - name: nJobs
           - name: runYear
           - name: startFromSim
+          - name: nNodes
 
       dag:
         tasks:
@@ -63,8 +67,15 @@ spec:
                 - name: runYear
                   value: "{{inputs.parameters.runYear}}"
 
-          - name: gen
+          - name: pull-cmssw10-image
             dependencies: [divide-jobs, define-parameters]
+            template: pull-cmssw10-image-template
+            withSequence:
+              count: "{{inputs.parameters.nNodes}}"
+              start: 1
+
+          - name: gen
+            dependencies: [pull-cmssw10-image]
             template: gen-template
             when: "{{inputs.parameters.startFromSim}} == false"
             arguments:
@@ -131,8 +142,15 @@ spec:
                   value: "{{tasks.define-parameters.outputs.parameters.conditionsDigiPatNano}}"
             withParam: "{{tasks.divide-jobs.outputs.result}}"
 
-          - name: hlt
+          - name: pull-cmssw7-image
+            template: pull-cmssw7-image-template
             dependencies: [digi2raw]
+            withSequence:
+              count: "{{inputs.parameters.nNodes}}"
+              start: 1
+
+          - name: hlt
+            dependencies: [digi2raw, pull-cmssw7-image]
             template: hlt-template
             arguments:
               parameters:
@@ -286,6 +304,17 @@ spec:
           for key, value in SELECTED_CONDS.items():
             with open(f"/tmp/params/{key}", "w") as tmp_file:
               tmp_file.write(str(value))
+            
+    - name: pull-cmssw10-image-template
+      script:
+        image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
+        command: [bash]
+        source: |
+          echo "Image gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700 is now pulled and cached on this node."
+          exit 0
+        resources:
+          requests:
+            cpu:  "3"
 
     - name: gen-template
       inputs:
@@ -405,7 +434,7 @@ spec:
           
         resources:
           requests:
-            cpu: "600m"
+            cpu: "1"
             memory: "2Gi"
 
     - name: sim-template
@@ -493,7 +522,7 @@ spec:
           # Comment out this part of the script, if you want to look at the files different steps create
         resources:
           requests:
-            cpu: "600m"
+            cpu: "1"
             memory: "2Gi"
 
     - name: pre-digi2raw-template
@@ -629,8 +658,19 @@ spec:
 
         resources:
           requests:
-            cpu: "600m"
+            cpu: "1"
             memory: "2Gi"
+
+    - name: pull-cmssw7-image-template
+      script:
+        image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker/cmssw_8_0_33_ul-slc7_amd64_gcc530
+        command: [bash]
+        source: |
+          echo "Image gitlab-registry.cern.ch/cms-cloud/cmssw-docker/cmssw_8_0_33_ul-slc7_amd64_gcc530 is now pulled and cached on this node."
+          exit 0
+        resources:
+          requests:
+            cpu:  "3"
 
     - name: hlt-template
       inputs:
@@ -716,7 +756,7 @@ spec:
 
         resources:
           requests:
-            cpu: "600m"
+            cpu: "1"
             memory: "2Gi"
 
     - name: reco-template
@@ -802,7 +842,7 @@ spec:
         
         resources:
           requests:
-            cpu: "600m"
+            cpu: "1"
             memory: "2Gi"
 
     - name: pat-template
@@ -887,7 +927,7 @@ spec:
         
         resources:
           requests:
-            cpu: "600m"
+            cpu: "1"
             memory: "2Gi"
 
     - name: nano-template
@@ -970,7 +1010,7 @@ spec:
 
         resources:
           requests:
-            cpu: "600m"
+            cpu: "1"
             memory: "2Gi"
 
     - name: validate-template
