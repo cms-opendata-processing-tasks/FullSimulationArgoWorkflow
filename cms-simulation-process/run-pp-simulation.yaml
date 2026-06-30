@@ -12,16 +12,16 @@ spec:
       - name: bucket
         value: mirastorage
       - name: dataName
-        value: "my-dataset"
+        value: "parallel-testing"
       ### EDIT BELOW: replace the placeholder 'fragments.py' with the file name of your fragment
       - name: fragFileName
         value: "fragments.py"
       ### EDIT BELOW: replace the placeholder '10' with the amount of events you want to process
       - name: totEvents
-        value: 10
+        value: 32
       ### EDIT BELOW: replace the placeholder '1' with 4 times the amount of nodes on your cluster e.g. 4 times 2 nodes --> nJobs is 8
       - name: nJobs
-        value: 1
+        value: 8
       ### EDIT BELOW: replace the placeholder '2' with the number of nodes in your cluster
       - name: nNodes
         value: 2
@@ -47,8 +47,14 @@ spec:
 
       dag:
         tasks:
+          - name: pull-cmssw10-image
+            template: pull-cmssw10-image-template
+            withSequence:
+              count: "{{inputs.parameters.nNodes}}"
+
           - name: divide-jobs
             template: divide-jobs-template
+            dependencies: [pull-cmssw10-image]
             arguments:
               parameters:
                 - name: bucket
@@ -62,20 +68,14 @@ spec:
 
           - name: define-parameters
             template: define-parameters-template
+            dependencies: [pull-cmssw10-image]
             arguments:
               parameters:
                 - name: runYear
                   value: "{{inputs.parameters.runYear}}"
 
-          - name: pull-cmssw10-image
-            dependencies: [divide-jobs, define-parameters]
-            template: pull-cmssw10-image-template
-            withSequence:
-              count: "{{inputs.parameters.nNodes}}"
-              start: 1
-
           - name: gen
-            dependencies: [pull-cmssw10-image]
+            dependencies: [define-parameters, divide-jobs]
             template: gen-template
             when: "{{inputs.parameters.startFromSim}} == false"
             arguments:
@@ -142,15 +142,15 @@ spec:
                   value: "{{tasks.define-parameters.outputs.parameters.conditionsDigiPatNano}}"
             withParam: "{{tasks.divide-jobs.outputs.result}}"
 
-          - name: pull-cmssw7-image
-            template: pull-cmssw7-image-template
+          - name: pull-cmssw8-image
             dependencies: [digi2raw]
+            template: pull-cmssw8-image-template
             withSequence:
               count: "{{inputs.parameters.nNodes}}"
               start: 1
 
           - name: hlt
-            dependencies: [digi2raw, pull-cmssw7-image]
+            dependencies: [pull-cmssw8-image]
             template: hlt-template
             arguments:
               parameters:
@@ -227,6 +227,23 @@ spec:
                 - name: dataName
                   value: "{{inputs.parameters.dataName}}"
 
+    - name: pull-cmssw10-image-template
+      initContainers:
+        - name: pull-cmssw10
+          image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
+          imagePullPolicy: IfNotPresent
+          command: [sh, -c, "echo CMSSW10 pulled"]
+        
+      script:
+        image: alpine:latest
+        command: [sh]
+        source: |
+          echo "CMSSW images pulled and cached on this node."
+          exit 0
+        resources:
+          requests:
+            cpu:  "3"
+          
     - name: divide-jobs-template
       inputs:
         parameters:
@@ -304,17 +321,6 @@ spec:
           for key, value in SELECTED_CONDS.items():
             with open(f"/tmp/params/{key}", "w") as tmp_file:
               tmp_file.write(str(value))
-            
-    - name: pull-cmssw10-image-template
-      script:
-        image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
-        command: [bash]
-        source: |
-          echo "Image gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700 is now pulled and cached on this node."
-          exit 0
-        resources:
-          requests:
-            cpu:  "3"
 
     - name: gen-template
       inputs:
@@ -434,7 +440,7 @@ spec:
           
         resources:
           requests:
-            cpu: "1"
+            cpu: "700m"
             memory: "2Gi"
 
     - name: sim-template
@@ -522,7 +528,7 @@ spec:
           # Comment out this part of the script, if you want to look at the files different steps create
         resources:
           requests:
-            cpu: "1"
+            cpu: "700m"
             memory: "2Gi"
 
     - name: pre-digi2raw-template
@@ -658,19 +664,26 @@ spec:
 
         resources:
           requests:
-            cpu: "1"
+            cpu: "700m"
             memory: "2Gi"
 
-    - name: pull-cmssw7-image-template
-      script:
+    - name: pull-cmssw8-image-template
+      initContainers:
+      - name: pull-cmssw8
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker/cmssw_8_0_33_ul-slc7_amd64_gcc530
-        command: [bash]
+        imagePullPolicy: IfNotPresent
+        command: [sh, -c, "echo CMSSW8 pulled"]
+      
+      script:
+        image: alpine:latest
+        command: [sh]
         source: |
-          echo "Image gitlab-registry.cern.ch/cms-cloud/cmssw-docker/cmssw_8_0_33_ul-slc7_amd64_gcc530 is now pulled and cached on this node."
+          echo "CMSSW images pulled and cached on this node."
           exit 0
         resources:
           requests:
             cpu:  "3"
+
 
     - name: hlt-template
       inputs:
@@ -756,7 +769,7 @@ spec:
 
         resources:
           requests:
-            cpu: "1"
+            cpu: "700m"
             memory: "2Gi"
 
     - name: reco-template
@@ -842,7 +855,7 @@ spec:
         
         resources:
           requests:
-            cpu: "1"
+            cpu: "700m"
             memory: "2Gi"
 
     - name: pat-template
@@ -927,7 +940,7 @@ spec:
         
         resources:
           requests:
-            cpu: "1"
+            cpu: "700m"
             memory: "2Gi"
 
     - name: nano-template
@@ -1010,7 +1023,7 @@ spec:
 
         resources:
           requests:
-            cpu: "1"
+            cpu: "700m"
             memory: "2Gi"
 
     - name: validate-template
