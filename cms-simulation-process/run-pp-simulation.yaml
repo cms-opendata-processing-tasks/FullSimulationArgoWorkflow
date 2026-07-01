@@ -314,7 +314,7 @@ spec:
 
           mkdir -p /data/GEN
 
-          PYTHON_FILENAME=/data/GEN/GEN_cfg.py
+          PYTHON_FILENAME=/data/GEN/GEN{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/GEN/{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
@@ -353,9 +353,13 @@ spec:
           # To-do: figure out if reports are necessary and make them jobIndex specific
           REPORT_NAME=/data/GEN/report.xml
 
-          echo "Starting cmsrun"
+          echo "Starting cmsRun"
 
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
+
+          echo "Testaan toimiiko kirjottaminen yhtä aikaa" >> /data/GEN/{{inputs.parameters.jobIndex}}_finished.txt
+          echo "permissions of the /data" $(ls -hal /data/GEN)
+          
         
         #resources:
         #  requests:
@@ -394,7 +398,7 @@ spec:
 
           mkdir -p /data/SIM
 
-          PYTHON_FILENAME=/data/SIM/SIM_cfg.py
+          PYTHON_FILENAME=/data/SIM/SIM{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/SIM/{{inputs.parameters.jobIndex}}.root
           INPUT_FILE=/data/GEN/{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
@@ -460,7 +464,7 @@ spec:
 
           mkdir -p /data/DIGIPremix
 
-          PYTHON_FILENAME=/data/DIGIPremix/DIGIPremix_cfg.py
+          PYTHON_FILENAME=/data/DIGIPremix/DIGIPremix{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/DIGIPremix/{{inputs.parameters.jobIndex}}.root
           INPUT_FILE=/data/SIM/{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
@@ -509,7 +513,7 @@ spec:
 
           mkdir -p /data/HLT
 
-          PYTHON_FILENAME=/data/HLT/HLT_cfg.py
+          PYTHON_FILENAME=/data/HLT/HLT{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/HLT/{{inputs.parameters.jobIndex}}.root
           INPUT_FILE=/data/DIGIPremix/{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
@@ -559,7 +563,7 @@ spec:
 
           mkdir -p /data/RECO
 
-          PYTHON_FILENAME=/data/RECO/RECO_cfg.py
+          PYTHON_FILENAME=/data/RECO/RECO{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/RECO/{{inputs.parameters.jobIndex}}.root
           INPUT_FILE=/data/HLT/{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
@@ -607,7 +611,7 @@ spec:
 
           mkdir -p /data/PAT
 
-          PYTHON_FILENAME=/data/PAT/PAT_cfg.py
+          PYTHON_FILENAME=/data/PAT/PAT{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/PAT/{{inputs.parameters.jobIndex}}.root
           INPUT_FILE=/data/RECO/{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
@@ -655,7 +659,7 @@ spec:
 
           mkdir -p /data/NANO
 
-          PYTHON_FILENAME=/data/NANO/NANO_cfg.py
+          PYTHON_FILENAME=/data/NANO/NANO{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/NANO/{{inputs.parameters.jobIndex}}.root
           INPUT_FILE=/data/PAT/{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
