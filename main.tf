@@ -21,7 +21,7 @@ provider "openstack" {
   region      = "dc3-a"
   user_name   = "PCU-L4HZJ69" # TODO: changeme
   tenant_name = "PCP-AGHLSED" # TODO: changeme
-  password    = "suoTaskalaikosmu7" # TODO: changeme
+  password    = "password" # TODO: changeme
 }
 
 provider "infomaniak" {
