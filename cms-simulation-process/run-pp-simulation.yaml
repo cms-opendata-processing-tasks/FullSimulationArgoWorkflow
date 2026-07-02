@@ -16,17 +16,20 @@ spec:
             
   arguments:
     parameters:
+      ### EDIT BELOW: replace the placeholder 'mirastorage' with the name of your object storage
+      - name: bucket
+        value: mirastorage
       - name: dataName
-        value: "my-dataset"
+        value: "multi-storage-testing"
       ### EDIT BELOW: replace the placeholder 'fragments.py' with the file name of your fragment
       - name: fragFileName
         value: "fragments.py"
       ### EDIT BELOW: replace the placeholder '10' with the amount of events you want to process
       - name: totEvents
-        value: 6
+        value: 6400
       ### EDIT BELOW: replace the placeholder '1' with 4 times the amount of nodes on your cluster e.g. 4 times 2 nodes --> nJobs is 8
       - name: nJobs
-        value: 2
+        value: 8
       ### EDIT BELOW: replace the placeholder '2016' with the year of the run you are simulating
       - name: runYear
         value: "2016"
@@ -35,6 +38,7 @@ spec:
     - name: cms-full-sim
       inputs:
         parameters:
+          - name: bucket
           - name: dataName
           - name: fragFileName
           - name: totEvents
@@ -66,6 +70,8 @@ spec:
             template: gen-template
             arguments:
               parameters:
+                - name: bucket
+                  value: "{{inputs.parameters.bucket}}"
                 - name: dataName
                   value: "{{inputs.parameters.dataName}}"
                 - name: fragFileName
@@ -170,6 +176,8 @@ spec:
             template: nano-template
             arguments:
               parameters:
+                - name: bucket
+                  value: "{{inputs.parameters.bucket}}"
                 - name: dataName
                   value: "{{inputs.parameters.dataName}}"
                 - name: jobIndex
@@ -185,13 +193,14 @@ spec:
             template: validate-template
             arguments:
               parameters:
+                - name: bucket
+                  value: "{{inputs.parameters.bucket}}"
                 - name: dataName
                   value: "{{inputs.parameters.dataName}}"
 
     - name: divide-jobs-template
       inputs:
         parameters:
-          
           - name: dataName
           - name: totEvents
           - name: nJobs
@@ -269,13 +278,32 @@ spec:
     - name: gen-template
       inputs:
         parameters:
+          - name: bucket
           - name: dataName
           - name: fragFileName
           - name: jobIndex
           - name: eventsInJob
           - name: conditionsGenSimReco
           - name: beamspot
-
+        
+        artifacts:
+          - name: GEN-config
+            path: /code/CMSSW_10_6_30/src/Configuration/GenProduction/python/fragments.py # path for file in container
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1 # placeholder, To-do
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/{{inputs.parameters.fragFileName}} # path where it stays in the cloud storage
+      
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
@@ -298,15 +326,8 @@ spec:
           echo "Now in" $(pwd)
 
 
-          #mkdir -p Configuration/GenProduction/python
-          #mv /data/fragments.py Configuration/GenProduction/python
-
-          # Testing if the block storage writing works, so fetching the fragment from the internet this time
-          echo "Trying to curl"
-          curl -v -s -k https://cms-pdmv-prod.web.cern.ch/mcm/public/restapi/requests/get_fragment/BTV-RunIISummer20UL16GEN-00010 --retry 3 --create-dirs -o Configuration/GenProduction/python/BTV-RunIISummer20UL16GEN-00010-fragment.py
-          mv Configuration/GenProduction/python/BTV-RunIISummer20UL16GEN-00010-fragment.py Configuration/GenProduction/python/fragments.py
-
-
+          mkdir -p Configuration/GenProduction/python
+          
           scram b
 
           # Make a dir where all the different jobs store the .root output files from this step
@@ -353,13 +374,7 @@ spec:
           # To-do: figure out if reports are necessary and make them jobIndex specific
           REPORT_NAME=/data/GEN/report.xml
 
-          echo "Starting cmsRun"
-
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
-
-          echo "Testaan toimiiko kirjottaminen yhtä aikaa" >> /data/GEN/{{inputs.parameters.jobIndex}}_finished.txt
-          echo "permissions of the /data" $(ls -hal /data/GEN)
-          
         
         #resources:
         #  requests:
@@ -368,7 +383,6 @@ spec:
     - name: sim-template
       inputs:
         parameters:
-          
           - name: dataName
           - name: jobIndex
           - name: eventsInJob
@@ -420,7 +434,6 @@ spec:
     - name: pre-digi2raw-template
       inputs:
         parameters:
-          
           - name: dataName
 
       script:
@@ -534,7 +547,6 @@ spec:
     - name: reco-template
       inputs:
         parameters:
-          
           - name: dataName
           - name: jobIndex
           - name: eventsInJob
@@ -630,11 +642,30 @@ spec:
     - name: nano-template
       inputs:
         parameters:
-          
+          - name: bucket
           - name: dataName
           - name: jobIndex
           - name: eventsInJob
           - name: conditionsDigiPatNano
+      
+      outputs:
+        artifacts:
+          - name: NANO-root
+            path: /output/NANO/{{inputs.parameters.jobIndex}}.root
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/NANO/{{inputs.parameters.jobIndex}}.root
 
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
@@ -657,10 +688,11 @@ spec:
 
           scram b
 
-          mkdir -p /data/NANO
+          sudo mkdir -p /output/NANO
+          sudo chown -R cmsusr:cmsusr /output/NANO
 
-          PYTHON_FILENAME=/data/NANO/NANO{{inputs.parameters.jobIndex}}_cfg.py
-          OUTPUT_FILE=/data/NANO/{{inputs.parameters.jobIndex}}.root
+          PYTHON_FILENAME=NANO{{inputs.parameters.jobIndex}}_cfg.py
+          OUTPUT_FILE=/output/NANO/{{inputs.parameters.jobIndex}}.root
           INPUT_FILE=/data/PAT/{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
@@ -671,22 +703,56 @@ spec:
           --fileout file:$OUTPUT_FILE --conditions $CONDITIONS --step NANO \
           --filein file:$INPUT_FILE --era Run2_2016,run2_nanoAOD_106Xv2 --no_exec --mc -n $EVENTS
 
-          REPORT_NAME=/data/PAT/report.xml
+          REPORT_NAME=/output/NANO/report.xml
 
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
 
     - name: validate-template
       inputs:
         parameters:
-          
+          - name: bucket
           - name: dataName
+
+        artifacts:
+          - name: NANO-root
+            path: /output/NANO
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/NANO
+
+      outputs:
+        artifacts:
+          - name: plots
+            path: /output/plots
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/plots
 
       script:
         image: python:3.11-slim
         command: [bash]
-        volumeMounts:
-          - name: workflow-pvc
-            mountPath: /data
         source: |
           import uproot
           import os
@@ -694,8 +760,8 @@ spec:
 
           pip install --no-cache-dir uproot awkward vector matplotlib
 
-          mkdir -p /data/plots
-          cd /data/plots
+          mkdir -p /plots
+          cd /plots
 
           cat > analyse.py << 'EOPY'
           import uproot
@@ -705,7 +771,7 @@ spec:
           import numpy as np
 
           vector.register_awkward()
-          input_file = "/data/NANO/1.root"
+          input_file = "/output/NANO/1.root"
           print(f"Loading {input_file}...")
 
           with uproot.open(input_file) as f:
