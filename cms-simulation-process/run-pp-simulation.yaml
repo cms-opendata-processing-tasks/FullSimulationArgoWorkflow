@@ -5,14 +5,10 @@ metadata:
 spec:
   entrypoint: cms-full-sim
   serviceAccountName: argo-service-account
-  volumeClaimTemplates:
-    - metadata:
-        name: workflow-pvc
-      spec:
-        accessModes: [ "ReadWriteMany" ]
-        resources:
-          requests:
-            storage: 50Gi
+  volumes:
+    - name: workflow-pvc
+      persistentVolumeClaim:
+        claimName: workflow-pvc
             
   arguments:
     parameters:
@@ -26,10 +22,10 @@ spec:
         value: "fragments.py"
       ### EDIT BELOW: replace the placeholder '10' with the amount of events you want to process
       - name: totEvents
-        value: 6400
+        value: 15
       ### EDIT BELOW: replace the placeholder '1' with 4 times the amount of nodes on your cluster e.g. 4 times 2 nodes --> nJobs is 8
       - name: nJobs
-        value: 8
+        value: 4
       ### EDIT BELOW: replace the placeholder '2016' with the year of the run you are simulating
       - name: runYear
         value: "2016"
@@ -376,9 +372,12 @@ spec:
 
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
         
-        #resources:
-        #  requests:
-        #    cpu: "2"
+        resources:
+          requests:
+            cpu: "700m"
+            memory: "2Gi"
+          limits:
+            cpu: "800m"
 
     - name: sim-template
       inputs:
@@ -428,14 +427,13 @@ spec:
           REPORT_NAME=/data/SIM/report.xml
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
 
-          # Delete files from object storage that are useless now
-          # Comment out this part of the script, if you want to look at the files different steps create
+        resources:
+          requests:
+            cpu: "700m"
+            memory: "2Gi"
 
+          
     - name: pre-digi2raw-template
-      inputs:
-        parameters:
-          - name: dataName
-
       script:
         image: cernopendata/cernopendata-client
         command: [bash]
@@ -477,6 +475,11 @@ spec:
 
           mkdir -p /data/DIGIPremix
 
+          # Delete useless GEN step root from block storage
+          # to make room for future files
+
+          rm /data/GEN/{{inputs.parameters.jobIndex}}.root # TODO: or use rm -i
+
           PYTHON_FILENAME=/data/DIGIPremix/DIGIPremix{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/DIGIPremix/{{inputs.parameters.jobIndex}}.root
           INPUT_FILE=/data/SIM/{{inputs.parameters.jobIndex}}.root
@@ -494,6 +497,11 @@ spec:
 
           REPORT_NAME=/data/DIGIPremix/report.xml
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
+        
+        resources:
+          requests:
+            cpu: "700m"
+            memory: "2Gi"
 
     - name: hlt-template
       inputs:
@@ -526,6 +534,9 @@ spec:
 
           mkdir -p /data/HLT
 
+          # Delete old files to make room for future files
+          rm /data/SIM/{{inputs.parameters.jobIndex}}.root
+
           PYTHON_FILENAME=/data/HLT/HLT{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/HLT/{{inputs.parameters.jobIndex}}.root
           INPUT_FILE=/data/DIGIPremix/{{inputs.parameters.jobIndex}}.root
@@ -543,6 +554,11 @@ spec:
 
           REPORT_NAME=/data/DIGIPremix/report.xml
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
+        
+        resources:
+          requests:
+            cpu: "700m"
+            memory: "2Gi"
 
     - name: reco-template
       inputs:
@@ -575,6 +591,8 @@ spec:
 
           mkdir -p /data/RECO
 
+          rm /data/DIGIPremix/{{inputs.parameters.jobIndex}}.root
+
           PYTHON_FILENAME=/data/RECO/RECO{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/RECO/{{inputs.parameters.jobIndex}}.root
           INPUT_FILE=/data/HLT/{{inputs.parameters.jobIndex}}.root
@@ -590,11 +608,15 @@ spec:
           REPORT_NAME=/data/RECO/report.xml
 
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
+        
+        resources:
+          requests:
+            cpu: "700m"
+            #memory: "2Gi"
 
     - name: pat-template
       inputs:
         parameters:
-          
           - name: dataName
           - name: jobIndex
           - name: eventsInJob
@@ -623,6 +645,8 @@ spec:
 
           mkdir -p /data/PAT
 
+          rm /data/HLT/{{inputs.parameters.jobIndex}}.root
+
           PYTHON_FILENAME=/data/PAT/PAT{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/PAT/{{inputs.parameters.jobIndex}}.root
           INPUT_FILE=/data/RECO/{{inputs.parameters.jobIndex}}.root
@@ -638,6 +662,11 @@ spec:
           REPORT_NAME=/data/PAT/report.xml
 
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
+        
+        resources:
+          requests:
+            cpu: "700m"
+            memory: "2Gi"
 
     - name: nano-template
       inputs:
@@ -691,6 +720,8 @@ spec:
           sudo mkdir -p /output/NANO
           sudo chown -R cmsusr:cmsusr /output/NANO
 
+          rm /data/RECO/{{inputs.parameters.jobIndex}}.root
+
           PYTHON_FILENAME=NANO{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/output/NANO/{{inputs.parameters.jobIndex}}.root
           INPUT_FILE=/data/PAT/{{inputs.parameters.jobIndex}}.root
@@ -706,6 +737,11 @@ spec:
           REPORT_NAME=/output/NANO/report.xml
 
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
+        
+        resources:
+          requests:
+            cpu: "700m"
+            memory: "2Gi"
 
     - name: validate-template
       inputs:
@@ -760,8 +796,8 @@ spec:
 
           pip install --no-cache-dir uproot awkward vector matplotlib
 
-          mkdir -p /plots
-          cd /plots
+          cd /output
+          mkdir -p plots
 
           cat > analyse.py << 'EOPY'
           import uproot
@@ -771,7 +807,7 @@ spec:
           import numpy as np
 
           vector.register_awkward()
-          input_file = "/output/NANO/1.root"
+          input_file = "NANO/1.root"
           print(f"Loading {input_file}...")
 
           with uproot.open(input_file) as f:
@@ -794,7 +830,7 @@ spec:
               plt.xlabel("nElectrons")
               plt.ylabel("Events")
               plt.grid(True, alpha=0.3)
-              plt.savefig("h_num_cands.png")
+              plt.savefig("plots/h_num_cands.png")
               plt.close()
 
               plt.figure(figsize=(8, 5))
@@ -804,7 +840,7 @@ spec:
               plt.xlabel("PDG ID")
               plt.ylabel("Counts")
               plt.grid(True, alpha=0.3)
-              plt.savefig("h_pdgid_cands.png")
+              plt.savefig("plots/h_pdgid_cands.png")
               plt.close()
 
               particles = vector.zip({"pt": pt, "eta": eta, "phi": phi, "mass": mass})
@@ -838,7 +874,7 @@ spec:
               plt.xlabel("M_{mumu} (GeV)")
               plt.ylabel("Events")
               plt.grid(True, alpha=0.3)
-              plt.savefig("h_dimuon_mass.png")
+              plt.savefig("plots/h_dimuon_mass.png")
               plt.close()
 
               plt.figure(figsize=(8, 6))
@@ -849,10 +885,10 @@ spec:
               plt.xlabel("M_{ee} (GeV)")
               plt.ylabel("Events")
               plt.grid(True, alpha=0.3)
-              plt.savefig("h_dielectron_mass.png")
+              plt.savefig("plots/h_dielectron_mass.png")
               plt.close()
               print("Analysis complete.")
           EOPY
 
           python3 analyse.py
-          ls -l /data/plots
+          ls -l /output/plots

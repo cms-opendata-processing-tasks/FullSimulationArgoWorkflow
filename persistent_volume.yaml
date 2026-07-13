@@ -6,9 +6,14 @@ metadata:
     type: local
 spec:
   capacity:
-    storage: 50Gi
+    storage: 10Gi
   accessModes:
     - ReadWriteMany
-  storageClassName: manual
-  hostPath:
-    path: "/data"
+  csi:
+    driver: cinder.csi.openstack.org
+    ## EDIT BELOW: replace the placeholder 'xxxxxxxx-xxxx-xxxx' with your volumes UUID
+    volumeHandle: xxxxxxxx-xxxx-xxxx
+  storageClassName: cinder-sc
+  claimRef:
+    name: workflow-pvc
+    namespace: argo
