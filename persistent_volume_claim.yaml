@@ -5,8 +5,9 @@ metadata:
   namespace: argo
 spec:
   accessModes:
-    - ReadWriteMany
+    - ReadWriteOnce
   resources:
     requests:
       storage: 10Gi
   storageClassName: manual
+  volumeName: workflow-pv
