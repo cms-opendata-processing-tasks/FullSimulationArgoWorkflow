@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: workflow-pv
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  csi:
+    driver: cinder.csi.openstack.org
+    ## EDIT BELOW: replace the placeholder 'xxxxxxxx-xxxx-xxxx' with your volumes UUID
+    volumeHandle: xxxxxxxx-xxxx-xxxx
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  claimRef:
+    name: workflow-pvc
+    namespace: argo

@@ -5,14 +5,18 @@ metadata:
 spec:
   entrypoint: cms-full-sim
   serviceAccountName: argo-service-account
-
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: workflow-pvc
+            
   arguments:
     parameters:
-      ### EDIT BELOW: replace the placeholder 'mirastorage' with your object storage name
+      ### EDIT BELOW: replace the placeholder 'yourstorage' with the name of your object storage
       - name: bucket
-        value: mirastorage
+        value: yourstorage
       - name: dataName
-        value: "parallel-testing"
+        value: "dataName"
       ### EDIT BELOW: replace the placeholder 'fragments.py' with the file name of your fragment
       - name: fragFileName
         value: "fragments.py"
@@ -57,8 +61,6 @@ spec:
             dependencies: [pull-cmssw10-image]
             arguments:
               parameters:
-                - name: bucket
-                  value: "{{inputs.parameters.bucket}}"
                 - name: dataName
                   value: "{{inputs.parameters.dataName}}"
                 - name: totEvents
@@ -101,8 +103,6 @@ spec:
             template: sim-template
             arguments:
               parameters:
-                - name: bucket
-                  value: "{{inputs.parameters.bucket}}"
                 - name: dataName
                   value: "{{inputs.parameters.dataName}}"
                 - name: jobIndex
@@ -120,8 +120,6 @@ spec:
             template: pre-digi2raw-template
             arguments:
               parameters:
-                - name: bucket
-                  value: "{{inputs.parameters.bucket}}"
                 - name: dataName
                   value: "{{inputs.parameters.dataName}}"
 
@@ -130,8 +128,6 @@ spec:
             template: digi2raw-template
             arguments:
               parameters:
-                - name: bucket
-                  value: "{{inputs.parameters.bucket}}"
                 - name: dataName
                   value: "{{inputs.parameters.dataName}}"
                 - name: jobIndex
@@ -154,8 +150,6 @@ spec:
             template: hlt-template
             arguments:
               parameters:
-                - name: bucket
-                  value: "{{inputs.parameters.bucket}}"
                 - name: dataName
                   value: "{{inputs.parameters.dataName}}"
                 - name: jobIndex
@@ -171,8 +165,6 @@ spec:
             template: reco-template
             arguments:
               parameters:
-                - name: bucket
-                  value: "{{inputs.parameters.bucket}}"
                 - name: dataName
                   value: "{{inputs.parameters.dataName}}"
                 - name: jobIndex
@@ -187,9 +179,7 @@ spec:
             dependencies: [reco]
             template: pat-template
             arguments:
-              parameters:
-                - name: bucket
-                  value: "{{inputs.parameters.bucket}}"
+              parameters:  
                 - name: dataName
                   value: "{{inputs.parameters.dataName}}"
                 - name: jobIndex
@@ -247,7 +237,6 @@ spec:
     - name: divide-jobs-template
       inputs:
         parameters:
-          - name: bucket
           - name: dataName
           - name: totEvents
           - name: nJobs
@@ -332,7 +321,7 @@ spec:
           - name: eventsInJob
           - name: conditionsGenSimReco
           - name: beamspot
-
+        
         artifacts:
           - name: GEN-config
             path: /code/CMSSW_10_6_30/src/Configuration/GenProduction/python/fragments.py # path for file in container
@@ -350,29 +339,13 @@ spec:
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
               key: FullSim/{{inputs.parameters.dataName}}/{{inputs.parameters.fragFileName}} # path where it stays in the cloud storage
-
-      outputs:
-        artifacts:
-          - name: GEN-root
-            path: /code/CMSSW_10_6_30/src/GEN/{{inputs.parameters.jobIndex}}.root
-            archive:
-              none: {}
-            s3:
-              endpoint: s3.pub1.infomaniak.cloud
-              bucket: "{{inputs.parameters.bucket}}"
-              region: us-east-1 # placeholder, To-do
-              accessKeySecret:
-                name: s3-credentials
-                key: S3_ACCESS_KEY_ID
-              secretKeySecret:
-                name: s3-credentials
-                key: S3_SECRET_ACCESS_KEY
-              insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/GEN/{{inputs.parameters.jobIndex}}.root # path where it stays in the cloud storage
-
+      
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
+        volumeMounts:
+          - name: data
+            mountPath: /data
         source: |
           # write script here
 
@@ -384,25 +357,28 @@ spec:
           cd /code/CMSSW_10_6_30/src/
 
           echo "Changing ownership"
+          sudo chown -R cmsusr:cmsusr /data
           sudo chown -R cmsusr:cmsusr /code/CMSSW_10_6_30
           echo "Now in" $(pwd)
 
-          mkdir -p Configuration/GenProduction/python
 
+          mkdir -p Configuration/GenProduction/python
+          
           scram b
 
           # Make a dir where all the different jobs store the .root output files from this step
           # --> this dir is mounted in the cloud storage
 
-          mkdir GEN
+          mkdir -p /data/GEN
 
-          PYTHON_FILENAME=GEN/GEN_cfg.py
-          OUTPUT_FILE=GEN/{{inputs.parameters.jobIndex}}.root
+          PYTHON_FILENAME=/data/GEN/GEN{{inputs.parameters.jobIndex}}_cfg.py
+          OUTPUT_FILE=/data/GEN/{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
           CONDITIONS={{inputs.parameters.conditionsGenSimReco}} # 106X_mcRun2_asymptotic_v13
           BEAMSPOT={{inputs.parameters.beamspot}} # Realistic25ns13TeV2016Collision
 
+          
           cmsDriver.py Configuration/GenProduction/python/fragments.py --python_filename $PYTHON_FILENAME --eventcontent RAWSIM \
           --customise Configuration/DataProcessing/Utils.addMonitoring --datatier GEN --fileout file:$OUTPUT_FILE \
           --conditions $CONDITIONS --beamspot $BEAMSPOT \
@@ -432,9 +408,7 @@ spec:
           cd /code/CMSSW_10_6_30/src/
 
           # To-do: figure out if reports are necessary and make them jobIndex specific
-          REPORT_NAME=GEN/report.xml
-
-          echo "Starting cmsrun"
+          REPORT_NAME=/data/GEN/report.xml
 
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
           
@@ -446,52 +420,18 @@ spec:
     - name: sim-template
       inputs:
         parameters:
-          - name: bucket
           - name: dataName
           - name: jobIndex
           - name: eventsInJob
           - name: conditionsGenSimReco
           - name: beamspot
 
-        artifacts:
-          - name: GEN-root
-            path: /code/CMSSW_10_6_30/src/GEN/{{inputs.parameters.jobIndex}}.root
-            archive:
-              none: {}
-            s3:
-              endpoint: s3.pub1.infomaniak.cloud
-              bucket: "{{inputs.parameters.bucket}}"
-              region: us-east-1 # placeholder, To-do
-              accessKeySecret:
-                name: s3-credentials
-                key: S3_ACCESS_KEY_ID
-              secretKeySecret:
-                name: s3-credentials
-                key: S3_SECRET_ACCESS_KEY
-              insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/GEN/{{inputs.parameters.jobIndex}}.root
-
-      outputs:
-        artifacts:
-          - name: SIM-root
-            path: /code/CMSSW_10_6_30/src/SIM/{{inputs.parameters.jobIndex}}.root
-            archive:
-              none: {}
-            s3:
-              endpoint: s3.pub1.infomaniak.cloud
-              bucket: "{{inputs.parameters.bucket}}"
-              region: us-east-1 # placeholder, To-do
-              accessKeySecret:
-                name: s3-credentials
-                key: S3_ACCESS_KEY_ID
-              secretKeySecret:
-                name: s3-credentials
-                key: S3_SECRET_ACCESS_KEY
-              insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/SIM/{{inputs.parameters.jobIndex}}.root
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
+        volumeMounts:
+          - name: data
+            mountPath: /data
         source: |
           # Init first with sudo and then cmsusr
           echo "Initializing cmsenv"
@@ -501,16 +441,17 @@ spec:
           cd /code/CMSSW_10_6_30/src
 
           echo "Changing ownership"
+          sudo chown -R cmsusr:cmsusr /data
           sudo chown -R cmsusr:cmsusr /code/CMSSW_10_6_30
           echo "Now in" $(pwd)
 
           scram b
 
-          mkdir SIM
+          mkdir -p /data/SIM
 
-          PYTHON_FILENAME=SIM/SIM_cfg.py
-          OUTPUT_FILE=SIM/{{inputs.parameters.jobIndex}}.root
-          INPUT_FILE=GEN/{{inputs.parameters.jobIndex}}.root
+          PYTHON_FILENAME=/data/SIM/SIM{{inputs.parameters.jobIndex}}_cfg.py
+          OUTPUT_FILE=/data/SIM/{{inputs.parameters.jobIndex}}.root
+          INPUT_FILE=/data/GEN/{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
           CONDITIONS={{inputs.parameters.conditionsGenSimReco}} # 106X_mcRun2_asymptotic_v13
@@ -521,113 +462,40 @@ spec:
           --fileout file:$OUTPUT_FILE --conditions $CONDITIONS --beamspot $BEAMSPOT \
           --step SIM --geometry DB:Extended --filein file:$INPUT_FILE --era Run2_2016 --runUnscheduled --no_exec --mc -n $EVENTS
 
-          REPORT_NAME=SIM/report.xml
+          REPORT_NAME=/data/SIM/report.xml
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
 
-          # Delete files from object storage that are useless now
-          # Comment out this part of the script, if you want to look at the files different steps create
         resources:
           requests:
             cpu: "700m"
             memory: "2Gi"
 
+          
     - name: pre-digi2raw-template
-      inputs:
-        parameters:
-          - name: bucket
-          - name: dataName
-
-      outputs:
-        artifacts:
-          - name: pileup_file_list
-            path: bucket/pileup_file_list.txt
-            archive:
-              none: {}
-            s3:
-              endpoint: s3.pub1.infomaniak.cloud
-              bucket: "{{inputs.parameters.bucket}}"
-              region: us-east-1 # placeholder, To-do
-              accessKeySecret:
-                name: s3-credentials
-                key: S3_ACCESS_KEY_ID
-              secretKeySecret:
-                name: s3-credentials
-                key: S3_SECRET_ACCESS_KEY
-              insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/pileup_file_list.txt
-
       script:
         image: cernopendata/cernopendata-client
         command: [bash]
+        volumeMounts:
+          - name: data
+            mountPath: /data
         source: |
-          mkdir bucket
-          cernopendata-client get-file-locations --recid 30595 --protocol xrootd > bucket/pileup_file_list.txt
+          sudo chmod a+rwx /data
+          cernopendata-client get-file-locations --recid 30595 --protocol xrootd > /data/pileup_file_list.txt
 
     - name: digi2raw-template
       inputs:
         parameters:
-          - name: bucket
           - name: dataName
           - name: jobIndex
           - name: eventsInJob
           - name: conditionsDigiPatNano
 
-        artifacts:
-          - name: pileup_file_list
-            path: /code/CMSSW_10_6_30/src/pileup_file_list.txt
-            archive:
-              none: {}
-            s3:
-              endpoint: s3.pub1.infomaniak.cloud
-              bucket: "{{inputs.parameters.bucket}}"
-              region: us-east-1 # placeholder, To-do
-              accessKeySecret:
-                name: s3-credentials
-                key: S3_ACCESS_KEY_ID
-              secretKeySecret:
-                name: s3-credentials
-                key: S3_SECRET_ACCESS_KEY
-              insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/pileup_file_list.txt
-
-          - name: SIM-root
-            path: /code/CMSSW_10_6_30/src/SIM/{{inputs.parameters.jobIndex}}.root
-            archive:
-              none: {}
-            s3:
-              endpoint: s3.pub1.infomaniak.cloud
-              bucket: "{{inputs.parameters.bucket}}"
-              region: us-east-1 # placeholder, To-do
-              accessKeySecret:
-                name: s3-credentials
-                key: S3_ACCESS_KEY_ID
-              secretKeySecret:
-                name: s3-credentials
-                key: S3_SECRET_ACCESS_KEY
-              insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/SIM/{{inputs.parameters.jobIndex}}.root
-
-      outputs:
-        artifacts:
-          - name: DIGI2RAW-root
-            path: /code/CMSSW_10_6_30/src/DIGIPremix/{{inputs.parameters.jobIndex}}.root
-            archive:
-              none: {}
-            s3:
-              endpoint: s3.pub1.infomaniak.cloud
-              bucket: "{{inputs.parameters.bucket}}"
-              region: us-east-1 # placeholder, To-do
-              accessKeySecret:
-                name: s3-credentials
-                key: S3_ACCESS_KEY_ID
-              secretKeySecret:
-                name: s3-credentials
-                key: S3_SECRET_ACCESS_KEY
-              insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/DIGIPremix/{{inputs.parameters.jobIndex}}.root
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
+        volumeMounts:
+          - name: data
+            mountPath: /data
         source: |
           # Init first with sudo and then cmsusr
           echo "Initializing cmsenv"
@@ -637,21 +505,27 @@ spec:
           cd /code/CMSSW_10_6_30/src
 
           echo "Changing ownership"
+          sudo chown -R cmsusr:cmsusr /data
           sudo chown -R cmsusr:cmsusr /code/CMSSW_10_6_30
           echo "Now in" $(pwd)
 
           scram b          
 
-          mkdir DIGIPremix
+          mkdir -p /data/DIGIPremix
 
-          PYTHON_FILENAME=DIGIPremix/DIGIPremix_cfg.py
-          OUTPUT_FILE=DIGIPremix/{{inputs.parameters.jobIndex}}.root
-          INPUT_FILE=SIM/{{inputs.parameters.jobIndex}}.root
+          # Delete useless GEN step root from block storage
+          # to make room for future files
+
+          rm /data/GEN/{{inputs.parameters.jobIndex}}.root # TODO: or use rm -i
+
+          PYTHON_FILENAME=/data/DIGIPremix/DIGIPremix{{inputs.parameters.jobIndex}}_cfg.py
+          OUTPUT_FILE=/data/DIGIPremix/{{inputs.parameters.jobIndex}}.root
+          INPUT_FILE=/data/SIM/{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
           CONDITIONS={{inputs.parameters.conditionsDigiPatNano}}
 
-          mapfile -n {{inputs.parameters.jobIndex}} SELECTED_PILEUP_FILES < pileup_file_list.txt
+          mapfile -n {{inputs.parameters.jobIndex}} SELECTED_PILEUP_FILES < /data/pileup_file_list.txt
 
           cmsDriver.py --python_filename $PYTHON_FILENAME --eventcontent PREMIXRAW \
           --customise Configuration/DataProcessing/Utils.addMonitoring --datatier GEN-SIM-DIGI \
@@ -659,9 +533,9 @@ spec:
           --datamix PreMix --procModifiers premix_stage2 --conditions $CONDITIONS --step DIGI,DATAMIX,L1,DIGI2RAW \
           --geometry DB:Extended --filein file:$INPUT_FILE --era Run2_2016 --runUnscheduled --no_exec --mc -n $EVENTS
 
-          REPORT_NAME=DIGIPremix/report.xml
+          REPORT_NAME=/data/DIGIPremix/report.xml
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
-
+        
         resources:
           requests:
             cpu: "700m"
@@ -688,51 +562,17 @@ spec:
     - name: hlt-template
       inputs:
         parameters:
-          - name: bucket
           - name: dataName
           - name: jobIndex
           - name: eventsInJob
           - name: conditionsHLT
 
-        artifacts:
-          - name: DIGIPremix-root
-            path: /code/CMSSW_8_0_33_UL/src/DIGIPremix/{{inputs.parameters.jobIndex}}.root
-            archive:
-              none: {}
-            s3:
-              endpoint: s3.pub1.infomaniak.cloud
-              bucket: "{{inputs.parameters.bucket}}"
-              region: us-east-1 # placeholder, To-do
-              accessKeySecret:
-                name: s3-credentials
-                key: S3_ACCESS_KEY_ID
-              secretKeySecret:
-                name: s3-credentials
-                key: S3_SECRET_ACCESS_KEY
-              insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/DIGIPremix/{{inputs.parameters.jobIndex}}.root # path where it stays in the cloud storage
-
-      outputs:
-        artifacts:
-          - name: HLT-root
-            path: /code/CMSSW_8_0_33_UL/src/HLT/{{inputs.parameters.jobIndex}}.root
-            archive:
-              none: {}
-            s3:
-              endpoint: s3.pub1.infomaniak.cloud
-              bucket: "{{inputs.parameters.bucket}}"
-              region: us-east-1 # placeholder, To-do
-              accessKeySecret:
-                name: s3-credentials
-                key: S3_ACCESS_KEY_ID
-              secretKeySecret:
-                name: s3-credentials
-                key: S3_SECRET_ACCESS_KEY
-              insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/HLT/{{inputs.parameters.jobIndex}}.root # path where it stays in the cloud storage
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker/cmssw_8_0_33_ul-slc7_amd64_gcc530
         command: [bash]
+        volumeMounts:
+          - name: data
+            mountPath: /data
         source: |
           # Init first with sudo and then cmsusr
           echo "Initializing cmsenv"
@@ -742,16 +582,20 @@ spec:
           cd /code/CMSSW_8_0_33_UL/src
 
           echo "Changing ownership"
+          sudo chown -R cmsusr:cmsusr /data
           sudo chown -R cmsusr:cmsusr /code/CMSSW_8_0_33_UL
           echo "Now in" $(pwd)
 
           scram b
 
-          mkdir HLT
+          mkdir -p /data/HLT
 
-          PYTHON_FILENAME=HLT/HLT_cfg.py
-          OUTPUT_FILE=HLT/{{inputs.parameters.jobIndex}}.root
-          INPUT_FILE=DIGIPremix/{{inputs.parameters.jobIndex}}.root
+          # Delete old files to make room for future files
+          rm /data/SIM/{{inputs.parameters.jobIndex}}.root
+
+          PYTHON_FILENAME=/data/HLT/HLT{{inputs.parameters.jobIndex}}_cfg.py
+          OUTPUT_FILE=/data/HLT/{{inputs.parameters.jobIndex}}.root
+          INPUT_FILE=/data/DIGIPremix/{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
           CONDITIONS={{inputs.parameters.conditionsHLT}}
@@ -764,9 +608,9 @@ spec:
           --step HLT:25ns15e33_v4 --conditions $CONDITIONS \
           --geometry DB:Extended --filein file:$INPUT_FILE --era Run2_2016 --no_exec --mc -n $EVENTS
 
-          REPORT_NAME=DIGIPremix/report.xml
+          REPORT_NAME=/data/DIGIPremix/report.xml
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
-
+        
         resources:
           requests:
             cpu: "700m"
@@ -775,52 +619,17 @@ spec:
     - name: reco-template
       inputs:
         parameters:
-          - name: bucket
           - name: dataName
           - name: jobIndex
           - name: eventsInJob
           - name: conditionsGenSimReco
 
-        artifacts:
-          - name: HLT-root
-            path: /code/CMSSW_10_6_30/src/HLT/{{inputs.parameters.jobIndex}}.root
-            archive:
-              none: {}
-            s3:
-              endpoint: s3.pub1.infomaniak.cloud
-              bucket: "{{inputs.parameters.bucket}}"
-              region: us-east-1 # placeholder, To-do
-              accessKeySecret:
-                name: s3-credentials
-                key: S3_ACCESS_KEY_ID
-              secretKeySecret:
-                name: s3-credentials
-                key: S3_SECRET_ACCESS_KEY
-              insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/HLT/{{inputs.parameters.jobIndex}}.root # path where it stays in the cloud storage
-
-      outputs:
-        artifacts:
-          - name: RECO-root
-            path: /code/CMSSW_10_6_30/src/RECO/{{inputs.parameters.jobIndex}}.root
-            archive:
-              none: {}
-            s3:
-              endpoint: s3.pub1.infomaniak.cloud
-              bucket: "{{inputs.parameters.bucket}}"
-              region: us-east-1
-              accessKeySecret:
-                name: s3-credentials
-                key: S3_ACCESS_KEY_ID
-              secretKeySecret:
-                name: s3-credentials
-                key: S3_SECRET_ACCESS_KEY
-              insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/RECO/{{inputs.parameters.jobIndex}}.root
-
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
+        volumeMounts:
+          - name: data
+            mountPath: /data
         source: |
           # Init first with sudo and then cmsusr
           echo "Initializing cmsenv"
@@ -830,16 +639,19 @@ spec:
           cd /code/CMSSW_10_6_30/src
 
           echo "Changing ownership"
+          sudo chown -R cmsusr:cmsusr /data
           sudo chown -R cmsusr:cmsusr /code/CMSSW_10_6_30
           echo "Now in" $(pwd)
 
           scram b
 
-          mkdir RECO
+          mkdir -p /data/RECO
 
-          PYTHON_FILENAME=RECO/RECO_cfg.py
-          OUTPUT_FILE=RECO/{{inputs.parameters.jobIndex}}.root
-          INPUT_FILE=HLT/{{inputs.parameters.jobIndex}}.root
+          rm /data/DIGIPremix/{{inputs.parameters.jobIndex}}.root
+
+          PYTHON_FILENAME=/data/RECO/RECO{{inputs.parameters.jobIndex}}_cfg.py
+          OUTPUT_FILE=/data/RECO/{{inputs.parameters.jobIndex}}.root
+          INPUT_FILE=/data/HLT/{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
           CONDITIONS={{inputs.parameters.conditionsGenSimReco}}
@@ -849,7 +661,7 @@ spec:
           --conditions $CONDITIONS --step RAW2DIGI,L1Reco,RECO,RECOSIM --geometry DB:Extended \
           --filein file:$INPUT_FILE --era Run2_2016 --runUnscheduled --no_exec --mc -n $EVENTS
 
-          REPORT_NAME=RECO/report.xml
+          REPORT_NAME=/data/RECO/report.xml
 
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
         
@@ -861,51 +673,17 @@ spec:
     - name: pat-template
       inputs:
         parameters:
-          - name: bucket
           - name: dataName
           - name: jobIndex
           - name: eventsInJob
           - name: conditionsDigiPatNano
 
-        artifacts:
-          - name: RECO-root
-            path: /code/CMSSW_10_6_30/src/RECO/{{inputs.parameters.jobIndex}}.root
-            archive:
-              none: {}
-            s3:
-              endpoint: s3.pub1.infomaniak.cloud
-              bucket: "{{inputs.parameters.bucket}}"
-              region: us-east-1
-              accessKeySecret:
-                name: s3-credentials
-                key: S3_ACCESS_KEY_ID
-              secretKeySecret:
-                name: s3-credentials
-                key: S3_SECRET_ACCESS_KEY
-              insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/RECO/{{inputs.parameters.jobIndex}}.root
-      outputs:
-        artifacts:
-          - name: PAT-root
-            path: /code/CMSSW_10_6_30/src/PAT/{{inputs.parameters.jobIndex}}.root
-            archive:
-              none: {}
-            s3:
-              endpoint: s3.pub1.infomaniak.cloud
-              bucket: "{{inputs.parameters.bucket}}"
-              region: us-east-1
-              accessKeySecret:
-                name: s3-credentials
-                key: S3_ACCESS_KEY_ID
-              secretKeySecret:
-                name: s3-credentials
-                key: S3_SECRET_ACCESS_KEY
-              insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/PAT/{{inputs.parameters.jobIndex}}.root
-
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
+        volumeMounts:
+          - name: data
+            mountPath: /data
         source: |
           # Init first with sudo and then cmsusr
           echo "Initializing cmsenv"
@@ -915,16 +693,19 @@ spec:
           cd /code/CMSSW_10_6_30/src
 
           echo "Changing ownership"
+          sudo chown -R cmsusr:cmsusr /data
           sudo chown -R cmsusr:cmsusr /code/CMSSW_10_6_30
           echo "Now in" $(pwd)
 
           scram b
 
-          mkdir PAT
+          mkdir -p /data/PAT
 
-          PYTHON_FILENAME=PAT/PAT_cfg.py
-          OUTPUT_FILE=PAT/{{inputs.parameters.jobIndex}}.root
-          INPUT_FILE=RECO/{{inputs.parameters.jobIndex}}.root
+          rm /data/HLT/{{inputs.parameters.jobIndex}}.root
+
+          PYTHON_FILENAME=/data/PAT/PAT{{inputs.parameters.jobIndex}}_cfg.py
+          OUTPUT_FILE=/data/PAT/{{inputs.parameters.jobIndex}}.root
+          INPUT_FILE=/data/RECO/{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
           CONDITIONS={{inputs.parameters.conditionsDigiPatNano}}
@@ -934,7 +715,7 @@ spec:
           --conditions $CONDITIONS --step PAT --procModifiers run2_miniAOD_UL --geometry DB:Extended \
           --filein file:$INPUT_FILE --era Run2_2016 --runUnscheduled --no_exec --mc -n $EVENTS
 
-          REPORT_NAME=PAT/report.xml
+          REPORT_NAME=/data/PAT/report.xml
 
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
         
@@ -951,28 +732,11 @@ spec:
           - name: jobIndex
           - name: eventsInJob
           - name: conditionsDigiPatNano
-
-        artifacts:
-          - name: PAT-root
-            path: /code/CMSSW_10_6_30/src/PAT/{{inputs.parameters.jobIndex}}.root
-            archive:
-              none: {}
-            s3:
-              endpoint: s3.pub1.infomaniak.cloud
-              bucket: "{{inputs.parameters.bucket}}"
-              region: us-east-1
-              accessKeySecret:
-                name: s3-credentials
-                key: S3_ACCESS_KEY_ID
-              secretKeySecret:
-                name: s3-credentials
-                key: S3_SECRET_ACCESS_KEY
-              insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/PAT/{{inputs.parameters.jobIndex}}.root
+      
       outputs:
         artifacts:
           - name: NANO-root
-            path: /code/CMSSW_10_6_30/src/NANO/{{inputs.parameters.jobIndex}}.root
+            path: /output/NANO/{{inputs.parameters.jobIndex}}.root
             archive:
               none: {}
             s3:
@@ -991,6 +755,9 @@ spec:
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
+        volumeMounts:
+          - name: data
+            mountPath: /data
         source: |
           # Init first with sudo and then cmsusr
           echo "Initializing cmsenv"
@@ -1000,16 +767,20 @@ spec:
           cd /code/CMSSW_10_6_30/src
 
           echo "Changing ownership"
+          sudo chown -R cmsusr:cmsusr /data
           sudo chown -R cmsusr:cmsusr /code/CMSSW_10_6_30
           echo "Now in" $(pwd)
 
           scram b
 
-          mkdir NANO
+          sudo mkdir -p /output/NANO
+          sudo chown -R cmsusr:cmsusr /output/NANO
 
-          PYTHON_FILENAME=NANO/NANO_cfg.py
-          OUTPUT_FILE=NANO/{{inputs.parameters.jobIndex}}.root
-          INPUT_FILE=PAT/{{inputs.parameters.jobIndex}}.root
+          rm /data/RECO/{{inputs.parameters.jobIndex}}.root
+
+          PYTHON_FILENAME=NANO{{inputs.parameters.jobIndex}}_cfg.py
+          OUTPUT_FILE=/output/NANO/{{inputs.parameters.jobIndex}}.root
+          INPUT_FILE=/data/PAT/{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
           CONDITIONS={{inputs.parameters.conditionsDigiPatNano}}
@@ -1019,8 +790,10 @@ spec:
           --fileout file:$OUTPUT_FILE --conditions $CONDITIONS --step NANO \
           --filein file:$INPUT_FILE --era Run2_2016,run2_nanoAOD_106Xv2 --no_exec --mc -n $EVENTS
 
-          cmsRun $PYTHON_FILENAME
+          REPORT_NAME=/output/NANO/report.xml
 
+          cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
+        
         resources:
           requests:
             cpu: "700m"
@@ -1034,7 +807,7 @@ spec:
 
         artifacts:
           - name: NANO-root
-            path: /tmp/NANO
+            path: /output/NANO
             archive:
               none: {}
             s3:
@@ -1053,7 +826,7 @@ spec:
       outputs:
         artifacts:
           - name: plots
-            path: /tmp/plots
+            path: /output/plots
             archive:
               none: {}
             s3:
@@ -1079,8 +852,8 @@ spec:
 
           pip install --no-cache-dir uproot awkward vector matplotlib
 
-          mkdir -p /tmp/plots
-          cd /tmp/plots
+          cd /output
+          mkdir -p plots
 
           cat > analyse.py << 'EOPY'
           import uproot
@@ -1090,7 +863,7 @@ spec:
           import numpy as np
 
           vector.register_awkward()
-          input_file = "/tmp/NANO/1.root"
+          input_file = "NANO/1.root"
           print(f"Loading {input_file}...")
 
           with uproot.open(input_file) as f:
@@ -1113,7 +886,7 @@ spec:
               plt.xlabel("nElectrons")
               plt.ylabel("Events")
               plt.grid(True, alpha=0.3)
-              plt.savefig("h_num_cands.png")
+              plt.savefig("plots/h_num_cands.png")
               plt.close()
 
               plt.figure(figsize=(8, 5))
@@ -1123,7 +896,7 @@ spec:
               plt.xlabel("PDG ID")
               plt.ylabel("Counts")
               plt.grid(True, alpha=0.3)
-              plt.savefig("h_pdgid_cands.png")
+              plt.savefig("plots/h_pdgid_cands.png")
               plt.close()
 
               particles = vector.zip({"pt": pt, "eta": eta, "phi": phi, "mass": mass})
@@ -1157,7 +930,7 @@ spec:
               plt.xlabel("M_{mumu} (GeV)")
               plt.ylabel("Events")
               plt.grid(True, alpha=0.3)
-              plt.savefig("h_dimuon_mass.png")
+              plt.savefig("plots/h_dimuon_mass.png")
               plt.close()
 
               plt.figure(figsize=(8, 6))
@@ -1168,10 +941,10 @@ spec:
               plt.xlabel("M_{ee} (GeV)")
               plt.ylabel("Events")
               plt.grid(True, alpha=0.3)
-              plt.savefig("h_dielectron_mass.png")
+              plt.savefig("plots/h_dielectron_mass.png")
               plt.close()
               print("Analysis complete.")
           EOPY
 
           python3 analyse.py
-          ls -l /tmp/plots
+          ls -l /output/plots
