@@ -6,15 +6,15 @@ spec:
   entrypoint: cms-full-sim
   serviceAccountName: argo-service-account
   volumes:
-    - name: workflow-pvc
+    - name: data
       persistentVolumeClaim:
         claimName: workflow-pvc
             
   arguments:
     parameters:
-      ### EDIT BELOW: replace the placeholder 'mirastorage' with the name of your object storage
+      ### EDIT BELOW: replace the placeholder 'yourstorage' with the name of your object storage
       - name: bucket
-        value: mirastorage
+        value: yourstorage
       - name: dataName
         value: "multi-storage-testing"
       ### EDIT BELOW: replace the placeholder 'fragments.py' with the file name of your fragment
@@ -22,14 +22,14 @@ spec:
         value: "fragments.py"
       ### EDIT BELOW: replace the placeholder '10' with the amount of events you want to process
       - name: totEvents
-        value: 15
+        value: 10
       ### EDIT BELOW: replace the placeholder '1' with 4 times the amount of nodes on your cluster e.g. 4 times 2 nodes --> nJobs is 8
       - name: nJobs
-        value: 4
+        value: 1
       ### EDIT BELOW: replace the placeholder '2016' with the year of the run you are simulating
       - name: runYear
         value: "2016"
-
+      
   templates:
     - name: cms-full-sim
       inputs:
@@ -304,7 +304,7 @@ spec:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
         volumeMounts:
-          - name: workflow-pvc
+          - name: data
             mountPath: /data
         source: |
           # write script here
@@ -392,7 +392,7 @@ spec:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
         volumeMounts:
-          - name: workflow-pvc
+          - name: data
             mountPath: /data
         source: |
           # Init first with sudo and then cmsusr
@@ -438,7 +438,7 @@ spec:
         image: cernopendata/cernopendata-client
         command: [bash]
         volumeMounts:
-          - name: workflow-pvc
+          - name: data
             mountPath: /data
         source: |
           sudo chmod a+rwx /data
@@ -456,7 +456,7 @@ spec:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
         volumeMounts:
-          - name: workflow-pvc
+          - name: data
             mountPath: /data
         source: |
           # Init first with sudo and then cmsusr
@@ -515,7 +515,7 @@ spec:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker/cmssw_8_0_33_ul-slc7_amd64_gcc530
         command: [bash]
         volumeMounts:
-          - name: workflow-pvc
+          - name: data
             mountPath: /data
         source: |
           # Init first with sudo and then cmsusr
@@ -572,7 +572,7 @@ spec:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
         volumeMounts:
-          - name: workflow-pvc
+          - name: data
             mountPath: /data
         source: |
           # Init first with sudo and then cmsusr
@@ -626,7 +626,7 @@ spec:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
         volumeMounts:
-          - name: workflow-pvc
+          - name: data
             mountPath: /data
         source: |
           # Init first with sudo and then cmsusr
@@ -700,7 +700,7 @@ spec:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
         volumeMounts:
-          - name: workflow-pvc
+          - name: data
             mountPath: /data
         source: |
           # Init first with sudo and then cmsusr
