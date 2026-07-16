@@ -19,19 +19,18 @@ terraform {
 provider "openstack" {
   auth_url    = "https://api.pub1.infomaniak.cloud/identity"
   region      = "dc3-a"
-  user_name   = "PCU-L4HZJ69" # TODO: changeme
-  tenant_name = "PCP-AGHLSED" # TODO: changeme
+  user_name   = "PCU-XXXXXXX" # TODO: changeme
+  tenant_name = "PCP-XXXXXXX" # TODO: changeme
   password    = "password" # TODO: changeme
 }
 
 provider "infomaniak" {
-    token   = "$INFOMANIAK_API_TOKEN"
-    # Remember to set the API token as env variable
+    # Remember to set the API token as env variable INFOMANIAK_TOKEN
 }
 
 resource "infomaniak_kaas" "cluster" {
-    public_cloud_id             = 17701 # TODO: changeme
-    public_cloud_project_id     = 39034 # TODO: changeme
+    public_cloud_id             = 12345 # TODO: changeme
+    public_cloud_project_id     = 6789 # TODO: changeme
     name                        = "my-cluster"
     pack_name                   = "dedicated_4"
     kubernetes_version          = "1.33"
