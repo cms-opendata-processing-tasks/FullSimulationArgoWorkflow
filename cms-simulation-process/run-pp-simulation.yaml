@@ -99,6 +99,17 @@ spec:
                 value: "{{inputs.parameters.startFromSim}}"
             withParam: "{{steps.divide-jobs.outputs.result}}"
 
+        - - name: merge-result-files
+            template: merge-result-files-template
+            arguments:
+              parameters:
+              - name: bucket
+                value: "{{inputs.parameters.bucket}}"
+              - name: dataName
+                value: "{{inputs.parameters.dataName}}"
+              - name: nJobs
+                value: "{{inputs.parameters.nJobs}}"
+
         - - name: validate-example
             template: validate-template
             arguments:
@@ -764,25 +775,6 @@ spec:
           - name: jobIndex
           - name: eventsInJob
           - name: conditionsDigiPatNano
-      
-      outputs:
-        artifacts:
-          - name: NANO-root
-            path: /output/NANO/{{inputs.parameters.jobIndex}}.root
-            archive:
-              none: {}
-            s3:
-              endpoint: s3.pub1.infomaniak.cloud
-              bucket: "{{inputs.parameters.bucket}}"
-              region: us-east-1
-              accessKeySecret:
-                name: s3-credentials
-                key: S3_ACCESS_KEY_ID
-              secretKeySecret:
-                name: s3-credentials
-                key: S3_SECRET_ACCESS_KEY
-              insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/NANO/{{inputs.parameters.jobIndex}}.root
 
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
@@ -805,13 +797,13 @@ spec:
 
           scram b
 
-          sudo mkdir -p /output/NANO
-          sudo chown -R cmsusr:cmsusr /output/NANO
+          sudo mkdir -p /data/NANO
+          sudo chown -R cmsusr:cmsusr /data/NANO
 
           rm /data/RECO/{{inputs.parameters.jobIndex}}.root
 
           PYTHON_FILENAME=NANO{{inputs.parameters.jobIndex}}_cfg.py
-          OUTPUT_FILE=/output/NANO/{{inputs.parameters.jobIndex}}.root
+          OUTPUT_FILE=/data/NANO/{{inputs.parameters.jobIndex}}.root
           INPUT_FILE=/data/PAT/{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
@@ -822,7 +814,7 @@ spec:
           --fileout file:$OUTPUT_FILE --conditions $CONDITIONS --step NANO \
           --filein file:$INPUT_FILE --era Run2_2016,run2_nanoAOD_106Xv2 --no_exec --mc -n $EVENTS
 
-          REPORT_NAME=/output/NANO/report.xml
+          REPORT_NAME=/data/NANO/report.xml
 
           cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
         
@@ -830,16 +822,18 @@ spec:
           requests:
             cpu: "700m"
             memory: "2Gi"
-
-    - name: validate-template
+    
+    - name: merge-result-files-template
       inputs:
         parameters:
           - name: bucket
           - name: dataName
-
+          - name: nJobs
+      
+      outputs:
         artifacts:
-          - name: NANO-root
-            path: /output/NANO
+          - name: results
+            path: /code/output
             archive:
               none: {}
             s3:
@@ -853,7 +847,79 @@ spec:
                 name: s3-credentials
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/NANO
+              key: FullSim/{{inputs.parameters.dataName}}
+      
+      script:
+        image: gitlab-registry.cern.ch/cms-cloud/root-vnc:latest
+        command: [bash]
+        volumeMounts:
+          - name: data
+            mountPath: /data
+        source: |
+          mkdir -p /code/output
+
+          FILENAME="/data/NANO/1.root"
+          FILESIZE=$(stat -c%s "$FILENAME") # in bytes
+          N_JOBS={{inputs.parameters.nJobs}}
+
+          OUTPUT_FILESIZE=2000000000 # Objective is to create 2 GB files
+
+          INPUT_FILES_IN_OUTPUT=$((OUTPUT_FILESIZE/$FILESIZE))
+
+          if [[ INPUT_FILES_IN_OUTPUT -ge $N_JOBS ]] ; then
+            INPUT_FILES_IN_OUTPUT=$N_JOBS
+          fi
+
+          N_OF_OUTPUT_FILES=$(($N_JOBS/$INPUT_FILES_IN_OUTPUT))
+
+          if [[ $(($N_JOBS%$INPUT_FILES_IN_OUTPUT)) != 0 ]]; then
+            ((  N_OF_OUTPUT_FILES+=1 ))
+          fi
+
+          for i in $N_OF_OUTPUT_FILES
+          do
+            START=$(($i))
+            END=$(($START+$INPUT_FILES_IN_OUTPUT-1))
+            if [[ $END != $N_JOBS ]] ; then
+              LIST_OF_INDECES=($(seq $START $END))
+            else
+              LIST_OF_INDECES=($(seq $START $N_JOBS))
+            fi
+
+            FILENAMES_STRING=""
+
+            for job in $(seq 0 $(($N_JOBS-1)))
+            do
+              FILENAMES_STRING+="/data/NANO/${LIST_OF_INDECES[job]}.root "
+            done
+            
+            hadd -f /code/output/output_$i.root $FILENAMES_STRING
+
+          done
+
+    - name: validate-template
+      inputs:
+        parameters:
+          - name: bucket
+          - name: dataName
+
+        artifacts:
+          - name: results
+            path: /output
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}
 
       outputs:
         artifacts:
