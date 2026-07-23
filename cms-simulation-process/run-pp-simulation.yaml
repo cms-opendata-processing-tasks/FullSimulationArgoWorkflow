@@ -961,7 +961,7 @@ spec:
           import numpy as np
 
           vector.register_awkward()
-          input_file = "NANO/1.root"
+          input_file = "1.root"
           print(f"Loading {input_file}...")
 
           with uproot.open(input_file) as f:
