@@ -6,17 +6,20 @@ spec:
   entrypoint: cms-full-sim
   serviceAccountName: argo-service-account
   volumes:
-    - name: data
+    - name: volume1
       persistentVolumeClaim:
-        claimName: workflow-pvc
+        claimName: pvc-1
+    - name: volume2
+      persistentVolumeClaim:
+        claimName: pvc-2
             
   arguments:
     parameters:
       ### EDIT BELOW: replace the placeholder 'yourstorage' with the name of your object storage
       - name: bucket
-        value: yourstorage
+        value: mirastorage
       - name: dataName
-        value: "dataName"
+        value: "merge-testing"
       ### EDIT BELOW: replace the placeholder 'fragments.py' with the file name of your fragment
       - name: fragFileName
         value: "fragments.py"
@@ -35,6 +38,12 @@ spec:
       ### EDIT BELOW: If you have already completed the LHE GEN step change the boolean to true
       - name: startFromSim
         value: false
+      - name: nodeIndeces
+        value: |
+          [
+          {"nodeIndex": 1},
+          {"nodeIndex": 2}
+          ]
 
   templates:
     - name: cms-full-sim
@@ -48,13 +57,9 @@ spec:
           - name: runYear
           - name: startFromSim
           - name: nNodes
+          - name: nodeIndeces
 
       steps:
-        - - name: pull-cmssw10-image
-            template: pull-cmssw10-image-template
-            withSequence:
-              count: "{{inputs.parameters.nNodes}}"
-
         - - name: divide-jobs
             template: divide-jobs-template
             arguments:
@@ -65,6 +70,8 @@ spec:
                   value: "{{inputs.parameters.totEvents}}"
                 - name: nJobs
                   value: "{{inputs.parameters.nJobs}}"
+                - name: nNodes
+                  value: "{{inputs.parameters.nNodes}}"
 
         - - name: define-parameters
             template: define-parameters-template
@@ -73,8 +80,8 @@ spec:
                 - name: runYear
                   value: "{{inputs.parameters.runYear}}"
 
-        - - name: simulation-pipeline
-            template: simulation-pipeline-template
+        - - name: process-on-node
+            template: process-on-node-template
             arguments:
               parameters:
               - name: bucket
@@ -83,10 +90,14 @@ spec:
                 value: "{{inputs.parameters.dataName}}"
               - name: fragFileName
                 value: "{{inputs.parameters.fragFileName}}"
+              - name: nodeIndex
+                value: "{{item.nodeIndex}}"
               - name: jobIndex
-                value: "{{item.jobIndex}}"
+                value: "{{item.nodeIndex}}"
+                # value: "{{item.jobIndex}}"
               - name: eventsInJob
-                value: "{{item.eventsInJob}}"
+                value: 2
+                # value: "{{item.eventsInJob}}"
               - name: conditionsGenSimReco
                 value: "{{steps.define-parameters.outputs.parameters.conditionsGenSimReco}}"
               - name: conditionsDigiPatNano
@@ -97,7 +108,7 @@ spec:
                 value: "{{steps.define-parameters.outputs.parameters.beamspot}}"
               - name: startFromSim
                 value: "{{inputs.parameters.startFromSim}}"
-            withParam: "{{steps.divide-jobs.outputs.result}}"
+            withParam: "{{inputs.parameters.nodeIndeces}}"
 
         - - name: merge-result-files
             template: merge-result-files-template
@@ -120,12 +131,13 @@ spec:
                 value: "{{inputs.parameters.dataName}}"  
 
                 
-    - name: simulation-pipeline-template
+    - name: process-on-node-template
       inputs:
         parameters:
           - name: bucket
           - name: dataName
           - name: fragFileName
+          - name: nodeIndex
           - name: jobIndex
           - name: eventsInJob
           - name: conditionsGenSimReco
@@ -135,6 +147,9 @@ spec:
           - name: startFromSim
 
       steps:
+        - - name: pull-cmssw10-image
+            template: pull-cmssw10-image-template
+
         - - name: gen
             template: gen-template
             when: "{{inputs.parameters.startFromSim}} == false"
@@ -146,6 +161,8 @@ spec:
                   value: "{{inputs.parameters.dataName}}"
                 - name: fragFileName
                   value: "{{inputs.parameters.fragFileName}}"
+                - name: nodeIndex
+                  value: "{{inputs.parameters.nodeIndex}}"
                 - name: jobIndex
                   value: "{{inputs.parameters.jobIndex}}"
                 - name: eventsInJob
@@ -163,6 +180,8 @@ spec:
                   value: "{{inputs.parameters.dataName}}"
                 - name: jobIndex
                   value: "{{inputs.parameters.jobIndex}}"
+                - name: nodeIndex
+                  value: "{{inputs.parameters.nodeIndex}}"
                 - name: eventsInJob
                   value: "{{inputs.parameters.eventsInJob}}"
                 - name: conditionsGenSimReco
@@ -176,6 +195,8 @@ spec:
               parameters:
                 - name: dataName
                   value: "{{inputs.parameters.dataName}}"
+                - name: nodeIndex
+                  value: "{{inputs.parameters.nodeIndex}}"
 
         - - name: digi2raw
             template: digi2raw-template
@@ -185,6 +206,8 @@ spec:
                   value: "{{inputs.parameters.dataName}}"
                 - name: jobIndex
                   value: "{{inputs.parameters.jobIndex}}"
+                - name: nodeIndex
+                  value: "{{inputs.parameters.nodeIndex}}"
                 - name: eventsInJob
                   value: "{{inputs.parameters.eventsInJob}}"
                 - name: conditionsDigiPatNano
@@ -202,6 +225,8 @@ spec:
               parameters:
                 - name: dataName
                   value: "{{inputs.parameters.dataName}}"
+                - name: nodeIndex
+                  value: "{{inputs.parameters.nodeIndex}}"
                 - name: jobIndex
                   value: "{{inputs.parameters.jobIndex}}"
                 - name: eventsInJob
@@ -215,6 +240,8 @@ spec:
               parameters:
                 - name: dataName
                   value: "{{inputs.parameters.dataName}}"
+                - name: nodeIndex
+                  value: "{{inputs.parameters.nodeIndex}}"
                 - name: jobIndex
                   value: "{{inputs.parameters.jobIndex}}"
                 - name: eventsInJob
@@ -228,6 +255,8 @@ spec:
               parameters:  
                 - name: dataName
                   value: "{{inputs.parameters.dataName}}"
+                - name: nodeIndex
+                  value: "{{inputs.parameters.nodeIndex}}"
                 - name: jobIndex
                   value: "{{inputs.parameters.jobIndex}}"
                 - name: eventsInJob
@@ -243,13 +272,14 @@ spec:
                   value: "{{inputs.parameters.bucket}}"
                 - name: dataName
                   value: "{{inputs.parameters.dataName}}"
+                - name: nodeIndex
+                  value: "{{inputs.parameters.nodeIndex}}"
                 - name: jobIndex
                   value: "{{inputs.parameters.jobIndex}}"
                 - name: eventsInJob
                   value: "{{inputs.parameters.eventsInJob}}"
                 - name: conditionsDigiPatNano
                   value: "{{inputs.parameters.conditionsDigiPatNano}}"
-
 
     - name: pull-cmssw10-image-template
       initContainers:
@@ -267,11 +297,10 @@ spec:
         resources:
           requests:
             cpu:  "3"
-          
+
     - name: divide-jobs-template
       inputs:
         parameters:
-          - name: dataName
           - name: totEvents
           - name: nJobs
       script:
@@ -364,6 +393,7 @@ spec:
           - name: eventsInJob
           - name: conditionsGenSimReco
           - name: beamspot
+          - name: nodeIndex
         
         artifacts:
           - name: GEN-config
@@ -387,7 +417,7 @@ spec:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
         volumeMounts:
-          - name: data
+          - name: volume{{inputs.parameters.nodeIndex}}
             mountPath: /data
         source: |
           # write script here
@@ -468,12 +498,13 @@ spec:
           - name: eventsInJob
           - name: conditionsGenSimReco
           - name: beamspot
+          - name: nodeIndex
 
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
         volumeMounts:
-          - name: data
+          - name: volume{{inputs.parameters.nodeIndex}}
             mountPath: /data
         source: |
           # Init first with sudo and then cmsusr
@@ -515,11 +546,14 @@ spec:
 
           
     - name: pre-digi2raw-template
+      inputs:
+        parameters:
+          - name: nodeIndex
       script:
         image: cernopendata/cernopendata-client
         command: [bash]
         volumeMounts:
-          - name: data
+          - name: volume{{inputs.parameters.nodeIndex}}
             mountPath: /data
         source: |
           sudo chmod a+rwx /data
@@ -529,6 +563,7 @@ spec:
       inputs:
         parameters:
           - name: dataName
+          - name: nodeIndex
           - name: jobIndex
           - name: eventsInJob
           - name: conditionsDigiPatNano
@@ -537,7 +572,7 @@ spec:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
         volumeMounts:
-          - name: data
+          - name: volume{{inputs.parameters.nodeIndex}}
             mountPath: /data
         source: |
           # Init first with sudo and then cmsusr
@@ -606,6 +641,7 @@ spec:
       inputs:
         parameters:
           - name: dataName
+          - name: nodeIndex
           - name: jobIndex
           - name: eventsInJob
           - name: conditionsHLT
@@ -614,7 +650,7 @@ spec:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker/cmssw_8_0_33_ul-slc7_amd64_gcc530
         command: [bash]
         volumeMounts:
-          - name: data
+          - name: volume{{inputs.parameters.nodeIndex}}
             mountPath: /data
         source: |
           # Init first with sudo and then cmsusr
@@ -663,6 +699,7 @@ spec:
       inputs:
         parameters:
           - name: dataName
+          - name: nodeIndex
           - name: jobIndex
           - name: eventsInJob
           - name: conditionsGenSimReco
@@ -671,7 +708,7 @@ spec:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
         volumeMounts:
-          - name: data
+          - name: volume{{inputs.parameters.nodeIndex}}
             mountPath: /data
         source: |
           # Init first with sudo and then cmsusr
@@ -717,6 +754,7 @@ spec:
       inputs:
         parameters:
           - name: dataName
+          - name: nodeIndex
           - name: jobIndex
           - name: eventsInJob
           - name: conditionsDigiPatNano
@@ -725,7 +763,7 @@ spec:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
         volumeMounts:
-          - name: data
+          - name: volume{{inputs.parameters.nodeIndex}}
             mountPath: /data
         source: |
           # Init first with sudo and then cmsusr
@@ -772,6 +810,7 @@ spec:
         parameters:
           - name: bucket
           - name: dataName
+          - name: nodeIndex
           - name: jobIndex
           - name: eventsInJob
           - name: conditionsDigiPatNano
@@ -780,7 +819,7 @@ spec:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
         volumeMounts:
-          - name: data
+          - name: volume{{inputs.parameters.nodeIndex}}
             mountPath: /data
         source: |
           # Init first with sudo and then cmsusr
@@ -853,7 +892,7 @@ spec:
         image: gitlab-registry.cern.ch/cms-cloud/root-vnc:latest
         command: [bash]
         volumeMounts:
-          - name: data
+          - name: volume1
             mountPath: /data
         source: |
           mkdir -p /code/output
@@ -961,7 +1000,7 @@ spec:
           import numpy as np
 
           vector.register_awkward()
-          input_file = "NANO/1.root"
+          input_file = "1.root"
           print(f"Loading {input_file}...")
 
           with uproot.open(input_file) as f:
