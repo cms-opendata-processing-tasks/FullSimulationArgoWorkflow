@@ -26,9 +26,8 @@ spec:
       ### EDIT BELOW: replace the placeholder '10' with the amount of events you want to process
       - name: totEvents
         value: 10
-      ### EDIT BELOW: replace the placeholder '4' with 2 times the amount of nodes on your cluster e.g. 4 times 2 nodes --> nJobs is 8
-      - name: nJobs
-        value: 4
+      - name: jobsPerNode
+        value: 2 # The workflow has been tested with nodes that only fit 2 jobs per node
       ### EDIT BELOW: replace the placeholder '2' with the number of nodes in your cluster
       - name: nNodes
         value: 2
@@ -38,18 +37,6 @@ spec:
       ### EDIT BELOW: If you have already completed the LHE GEN step change the boolean to true
       - name: startFromSim
         value: false
-      - name: nodeIndeces
-        value: |
-          [
-          {"nodeIndex": 1},
-          {"nodeIndex": 2}
-          ]
-      - name: jobItem
-        value: |
-          [
-          {"jobIndex": 1},
-          {"jobIndex": 2}
-          ]
 
   templates:
     - name: cms-full-sim
@@ -59,12 +46,10 @@ spec:
           - name: dataName
           - name: fragFileName
           - name: totEvents
-          - name: nJobs
+          - name: jobsPerNode
           - name: runYear
           - name: startFromSim
           - name: nNodes
-          - name: nodeIndeces
-          - name: jobItem
 
       steps:
         - - name: divide-jobs
@@ -75,8 +60,8 @@ spec:
                   value: "{{inputs.parameters.dataName}}"
                 - name: totEvents
                   value: "{{inputs.parameters.totEvents}}"
-                - name: nJobs
-                  value: "{{inputs.parameters.nJobs}}"
+                - name: jobsPerNode
+                  value: "{{inputs.parameters.jobsPerNode}}"
                 - name: nNodes
                   value: "{{inputs.parameters.nNodes}}"
 
@@ -99,12 +84,6 @@ spec:
                 value: "{{inputs.parameters.fragFileName}}"
               - name: nodeIndex
                 value: "{{item.nodeIndex}}"
-              - name: jobIndex
-                value: "{{item.nodeIndex}}"
-                # value: "{{item.jobIndex}}"
-              - name: eventsInJob
-                value: 2
-                # value: "{{item.eventsInJob}}"
               - name: conditionsGenSimReco
                 value: "{{steps.define-parameters.outputs.parameters.conditionsGenSimReco}}"
               - name: conditionsDigiPatNano
@@ -115,9 +94,9 @@ spec:
                 value: "{{steps.define-parameters.outputs.parameters.beamspot}}"
               - name: startFromSim
                 value: "{{inputs.parameters.startFromSim}}"
-              - name: jobItem
-                value: "{{inputs.parameters.jobItem}}"
-            withParam: "{{inputs.parameters.nodeIndeces}}"
+              - name: jobList
+                value: "{{item.jobList}}"
+            withParam: "{{steps.divide-jobs.outputs.result}}"
 
         - - name: merge-result-files
             template: merge-result-files-template
@@ -129,8 +108,8 @@ spec:
                 value: "{{inputs.parameters.dataName}}"
               - name: nNodes
                 value: "{{inputs.parameters.nNodes}}"
-              - name: nJobs
-                value: "{{inputs.parameters.nJobs}}"
+              - name: jobsPerNode
+                value: "{{inputs.parameters.jobsPerNode}}"
 
         - - name: validate-example
             template: validate-template
@@ -149,14 +128,12 @@ spec:
           - name: dataName
           - name: fragFileName
           - name: nodeIndex
-          - name: jobIndex
-          - name: eventsInJob
           - name: conditionsGenSimReco
           - name: conditionsDigiPatNano
           - name: conditionsHLT
           - name: beamspot
           - name: startFromSim
-          - name: jobItem
+          - name: jobList
 
       steps:
         # - - name: pull-cmssw10-image
@@ -180,7 +157,7 @@ spec:
                 - name: jobIndex
                   value: "{{item.jobIndex}}"
                 - name: eventsInJob
-                  value: "{{inputs.parameters.eventsInJob}}"
+                  value: "{{item.eventsInJob}}"
                 - name: conditionsGenSimReco
                   value: "{{inputs.parameters.conditionsGenSimReco}}"
                 - name: conditionsDigiPatNano
@@ -191,9 +168,11 @@ spec:
                   value: "{{inputs.parameters.beamspot}}"
                 - name: startFromSim
                   value: "{{inputs.parameters.startFromSim}}"
-            withParam: "{{inputs.parameters.jobItem}}"
+            withParam: "{{inputs.parameters.jobList}}"
 
     - name: run-process-job-template
+      retryStrategy:
+        limit: "3"
       inputs:
         parameters:
           - name: bucket
@@ -355,43 +334,67 @@ spec:
       inputs:
         parameters:
           - name: totEvents
-          - name: nJobs
+          - name: jobsPerNode
+          - name: nNodes
       script:
         image: python:alpine3.6
         command: [python]
         source: |
+          # This script divides the amount of events processed evenly among nodes and the parallel jobs inside them
+          # The result will be a list of jobs per node
+          # dictlist = [
+          #     {"nodeIndex": 1,
+          #      "jobList": [
+          #          {"jobIndex": 1, "eventsInJob": 10},
+          #          {"jobIndex": 2, "eventsInJob": 10}
+          #      ]
+          #     },
+          #     {"nodeIndex": 2,
+          #          "jobList": [
+          #              {"jobIndex": 1, "eventsInJob": 10},
+          #              {"jobIndex": 2, "eventsInJob": 11}
+          #          ]
+          #         },
+          # ]
+
           import json
           import sys
 
-          def split(a, n):
-            k, m = divmod(len(a), n)
-            return (a[i*k+min(i, m):(i+1)*k+min(i+1, m)] for i in range(n))
-
-          nJobs = {{inputs.parameters.nJobs}}
+          nNodes = {{inputs.parameters.nNodes}}
           totEvents = {{inputs.parameters.totEvents}}
-          modEvents = 0
-          eventsInJob = -1
-          
+          jobsPerNode = {{inputs.parameters.jobsPerNode}} 
           if totEvents > 0:
-            eventsInJob = int(totEvents/nJobs)
-            modEvents = totEvents % nJobs
+              eventsPerNode = int(totEvents/nNodes)
+              modEventsPerNode = totEvents % nNodes
+          else:
+              raise ValueError("Amount of events processed should be greater than zero")
 
-          splits= list(split(range(totEvents),nJobs))
-          itlist = [i for i in range(1, nJobs+1)]
-          
-          # If running a set of failed jobs, set itlist as the list of failed jobIndeces
-          #itlist = [1, 3]
+          nodeList = [i for i in range(1, nNodes+1)]
 
           dictlist = []
 
-          for i in itlist:
-            adict = { "jobIndex": i,
+          for i in nodeList:
+              joblist = []
+
+              if i == nNodes:
+                  eventsPerNode = eventsPerNode + modEventsPerNode
+                  
+              for j in range(1, jobsPerNode+1):
+                  eventsInJob = int(eventsPerNode/2)
+                  modEventsInJob = eventsPerNode % 2
+
+                  jobItem = { "jobIndex": j,
                       "eventsInJob": eventsInJob}
-            if i == nJobs:
-              adict = { "jobIndex": i,
-                        "eventsInJob": eventsInJob + modEvents}
-            dictlist.append(adict)
-          
+                  
+                  if j == 2:
+                      jobItem = { "jobIndex": j,
+                      "eventsInJob": eventsInJob + modEventsInJob}
+
+                  joblist.append(jobItem)
+
+              nodeItem = {"nodeIndex": i, "jobList": joblist}
+              dictlist.append(nodeItem)
+
           json.dump(dictlist, sys.stdout)
 
     - name: define-parameters-template
@@ -910,7 +913,7 @@ spec:
           - name: bucket
           - name: dataName
           - name: nNodes
-          - name: nJobs
+          - name: jobsPerNode
       
       outputs:
         artifacts:
@@ -946,7 +949,8 @@ spec:
           FILENAME="/data/1/NANO/1.root"
           FILESIZE=$(stat -c%s "$FILENAME") # in bytes
 
-          N_JOBS={{inputs.parameters.nNodes}} * 2
+          JOBS_PER_NODE={{inputs.parameters.jobsPerNode}}
+          N_JOBS={{inputs.parameters.nNodes}} * JOBS_PER_NODE
 
           OUTPUT_FILESIZE=2000000000 # 2GB is the target size
 
@@ -978,7 +982,7 @@ spec:
             do
               # The index of the volume where the file of a certain index is, is given by the ceiling rounded division of the file index and the amount of jobs on one node
               # Bash does not support ceiling rounding natively, so this is done with a math trick
-              VOLUME_NUM=$(( (job / 2) + (job % 2 > 0)))
+              VOLUME_NUM=$(( (job / $JOBS_PER_NODE) + (job % $JOBS_PER_NODE > 0)))
               FILENAMES_STRING+="/data/$VOLUME_NUM/NANO/${LIST_OF_INDECES[job]}.root "
             done
             
@@ -1050,7 +1054,7 @@ spec:
           import numpy as np
 
           vector.register_awkward()
-          input_file = "1.root"
+          input_file = "output_1.root"
           print(f"Loading {input_file}...")
 
           with uproot.open(input_file) as f:
