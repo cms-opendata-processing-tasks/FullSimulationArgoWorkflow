@@ -127,6 +127,8 @@ spec:
                 value: "{{inputs.parameters.bucket}}"
               - name: dataName
                 value: "{{inputs.parameters.dataName}}"
+              - name: nNodes
+                value: "{{inputs.parameters.nNodes}}"
               - name: nJobs
                 value: "{{inputs.parameters.nJobs}}"
 
@@ -157,18 +159,11 @@ spec:
           - name: jobItem
 
       steps:
-        - - name: pull-cmssw10-image
-            template: pull-cmssw10-image-template
+        # - - name: pull-cmssw10-image
+        #     template: pull-cmssw10-image-template
 
         # - - name: pull-cmssw8-image
         #     template: pull-cmssw8-image-template
-
-        # - - name: divide-run-jobs
-        #     template: divide-run-jobs-template
-        #     arguments:
-        #       parameters:
-        #         - name: eventsInJob
-        #           value: "{{inputs.parameters.eventsInJob}}"
 
         - - name: run-process-job
             template: run-process-job-template
@@ -538,10 +533,8 @@ spec:
 
           cd /code/CMSSW_10_6_30/src/
 
-          # To-do: figure out if reports are necessary and make them jobIndex specific
-          REPORT_NAME=/data/GEN/report.xml
 
-          cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
+          cmsRun $PYTHON_FILENAME
           
         resources:
           requests:
@@ -594,8 +587,7 @@ spec:
           --fileout file:$OUTPUT_FILE --conditions $CONDITIONS --beamspot $BEAMSPOT \
           --step SIM --geometry DB:Extended --filein file:$INPUT_FILE --era Run2_2016 --runUnscheduled --no_exec --mc -n $EVENTS
 
-          REPORT_NAME=/data/SIM/report.xml
-          cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
+          cmsRun $PYTHON_FILENAME
 
         resources:
           requests:
@@ -669,8 +661,7 @@ spec:
           --datamix PreMix --procModifiers premix_stage2 --conditions $CONDITIONS --step DIGI,DATAMIX,L1,DIGI2RAW \
           --geometry DB:Extended --filein file:$INPUT_FILE --era Run2_2016 --runUnscheduled --no_exec --mc -n $EVENTS
 
-          REPORT_NAME=/data/DIGIPremix/report.xml
-          cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
+          cmsRun $PYTHON_FILENAME
         
         resources:
           requests:
@@ -745,8 +736,7 @@ spec:
           --step HLT:25ns15e33_v4 --conditions $CONDITIONS \
           --geometry DB:Extended --filein file:$INPUT_FILE --era Run2_2016 --no_exec --mc -n $EVENTS
 
-          REPORT_NAME=/data/DIGIPremix/report.xml
-          cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
+          cmsRun $PYTHON_FILENAME
         
         resources:
           requests:
@@ -799,9 +789,7 @@ spec:
           --conditions $CONDITIONS --step RAW2DIGI,L1Reco,RECO,RECOSIM --geometry DB:Extended \
           --filein file:$INPUT_FILE --era Run2_2016 --runUnscheduled --no_exec --mc -n $EVENTS
 
-          REPORT_NAME=/data/RECO/report.xml
-
-          cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
+          cmsRun $PYTHON_FILENAME
         
         resources:
           requests:
@@ -854,9 +842,7 @@ spec:
           --conditions $CONDITIONS --step PAT --procModifiers run2_miniAOD_UL --geometry DB:Extended \
           --filein file:$INPUT_FILE --era Run2_2016 --runUnscheduled --no_exec --mc -n $EVENTS
 
-          REPORT_NAME=/data/PAT/report.xml
-
-          cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
+          cmsRun $PYTHON_FILENAME
         
         resources:
           requests:
@@ -911,9 +897,7 @@ spec:
           --fileout file:$OUTPUT_FILE --conditions $CONDITIONS --step NANO \
           --filein file:$INPUT_FILE --era Run2_2016,run2_nanoAOD_106Xv2 --no_exec --mc -n $EVENTS
 
-          REPORT_NAME=/data/NANO/report.xml
-
-          cmsRun -e -j $REPORT_NAME $PYTHON_FILENAME
+          cmsRun $PYTHON_FILENAME
         
         resources:
           requests:
@@ -925,6 +909,7 @@ spec:
         parameters:
           - name: bucket
           - name: dataName
+          - name: nNodes
           - name: nJobs
       
       outputs:
@@ -951,15 +936,19 @@ spec:
         command: [bash]
         volumeMounts:
           - name: volume1
-            mountPath: /data
+            mountPath: /data/1
+          - name: volume2
+            mountPath: /data/2
         source: |
-          mkdir -p /code/output
+          mkdir -p /code/output /data/1 /data/2
 
-          FILENAME="/data/NANO/1.root"
+          # First get one file to get an idea of the file size before merge
+          FILENAME="/data/1/NANO/1.root"
           FILESIZE=$(stat -c%s "$FILENAME") # in bytes
-          N_JOBS={{inputs.parameters.nJobs}}
 
-          OUTPUT_FILESIZE=2000000000 # Objective is to create 2 GB files
+          N_JOBS={{inputs.parameters.nNodes}} * 2
+
+          OUTPUT_FILESIZE=2000000000 # 2GB is the target size
 
           INPUT_FILES_IN_OUTPUT=$((OUTPUT_FILESIZE/$FILESIZE))
 
@@ -987,7 +976,10 @@ spec:
 
             for job in $(seq 0 $(($N_JOBS-1)))
             do
-              FILENAMES_STRING+="/data/NANO/${LIST_OF_INDECES[job]}.root "
+              # The index of the volume where the file of a certain index is, is given by the ceiling rounded division of the file index and the amount of jobs on one node
+              # Bash does not support ceiling rounding natively, so this is done with a math trick
+              VOLUME_NUM=$(( (job / 2) + (job % 2 > 0)))
+              FILENAMES_STRING+="/data/$VOLUME_NUM/NANO/${LIST_OF_INDECES[job]}.root "
             done
             
             hadd -f /code/output/output_$i.root $FILENAMES_STRING
