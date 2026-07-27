@@ -44,6 +44,12 @@ spec:
           {"nodeIndex": 1},
           {"nodeIndex": 2}
           ]
+      - name: jobItem
+        value: |
+          [
+          {"jobIndex": 1},
+          {"jobIndex": 2}
+          ]
 
   templates:
     - name: cms-full-sim
@@ -58,6 +64,7 @@ spec:
           - name: startFromSim
           - name: nNodes
           - name: nodeIndeces
+          - name: jobItem
 
       steps:
         - - name: divide-jobs
@@ -80,8 +87,8 @@ spec:
                 - name: runYear
                   value: "{{inputs.parameters.runYear}}"
 
-        - - name: process-on-node
-            template: process-on-node-template
+        - - name: start-process-on-node
+            template: start-process-on-node-template
             arguments:
               parameters:
               - name: bucket
@@ -108,6 +115,8 @@ spec:
                 value: "{{steps.define-parameters.outputs.parameters.beamspot}}"
               - name: startFromSim
                 value: "{{inputs.parameters.startFromSim}}"
+              - name: jobItem
+                value: "{{inputs.parameters.jobItem}}"
             withParam: "{{inputs.parameters.nodeIndeces}}"
 
         - - name: merge-result-files
@@ -131,7 +140,65 @@ spec:
                 value: "{{inputs.parameters.dataName}}"  
 
                 
-    - name: process-on-node-template
+    - name: start-process-on-node-template
+      inputs:
+        parameters:
+          - name: bucket
+          - name: dataName
+          - name: fragFileName
+          - name: nodeIndex
+          - name: jobIndex
+          - name: eventsInJob
+          - name: conditionsGenSimReco
+          - name: conditionsDigiPatNano
+          - name: conditionsHLT
+          - name: beamspot
+          - name: startFromSim
+          - name: jobItem
+
+      steps:
+        - - name: pull-cmssw10-image
+            template: pull-cmssw10-image-template
+
+        # - - name: pull-cmssw8-image
+        #     template: pull-cmssw8-image-template
+
+        # - - name: divide-run-jobs
+        #     template: divide-run-jobs-template
+        #     arguments:
+        #       parameters:
+        #         - name: eventsInJob
+        #           value: "{{inputs.parameters.eventsInJob}}"
+
+        - - name: run-process-job
+            template: run-process-job-template
+            arguments:
+              parameters:
+                - name: bucket
+                  value: "{{inputs.parameters.bucket}}"
+                - name: dataName
+                  value: "{{inputs.parameters.dataName}}"
+                - name: fragFileName
+                  value: "{{inputs.parameters.fragFileName}}"
+                - name: nodeIndex
+                  value: "{{inputs.parameters.nodeIndex}}"
+                - name: jobIndex
+                  value: "{{item.jobIndex}}"
+                - name: eventsInJob
+                  value: "{{inputs.parameters.eventsInJob}}"
+                - name: conditionsGenSimReco
+                  value: "{{inputs.parameters.conditionsGenSimReco}}"
+                - name: conditionsDigiPatNano
+                  value: "{{inputs.parameters.conditionsDigiPatNano}}"
+                - name: conditionsHLT
+                  value: "{{inputs.parameters.conditionsHLT}}"
+                - name: beamspot
+                  value: "{{inputs.parameters.beamspot}}"
+                - name: startFromSim
+                  value: "{{inputs.parameters.startFromSim}}"
+            withParam: "{{inputs.parameters.jobItem}}"
+
+    - name: run-process-job-template
       inputs:
         parameters:
           - name: bucket
@@ -147,9 +214,6 @@ spec:
           - name: startFromSim
 
       steps:
-        - - name: pull-cmssw10-image
-            template: pull-cmssw10-image-template
-
         - - name: gen
             template: gen-template
             when: "{{inputs.parameters.startFromSim}} == false"
@@ -212,12 +276,6 @@ spec:
                   value: "{{inputs.parameters.eventsInJob}}"
                 - name: conditionsDigiPatNano
                   value: "{{inputs.parameters.conditionsDigiPatNano}}"
-
-        # - - name: pull-cmssw8-image
-        #     template: pull-cmssw8-image-template
-        #     withSequence:
-        #       count: "{{inputs.parameters.nNodes}}"
-        #       start: 1
 
         - - name: hlt
             template: hlt-template
@@ -556,7 +614,7 @@ spec:
           - name: volume{{inputs.parameters.nodeIndex}}
             mountPath: /data
         source: |
-          sudo chmod a+rwx /data
+          chmod a+rwx /data
           cernopendata-client get-file-locations --recid 30595 --protocol xrootd > /data/pileup_file_list.txt
 
     - name: digi2raw-template

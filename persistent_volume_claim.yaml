@@ -5,7 +5,7 @@ metadata:
   namespace: argo
 spec:
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   resources:
     requests:
       storage: 10Gi
@@ -20,7 +20,7 @@ metadata:
   namespace: argo
 spec:
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   resources:
     requests:
       storage: 10Gi

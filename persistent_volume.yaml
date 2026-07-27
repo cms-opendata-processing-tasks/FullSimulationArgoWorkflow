@@ -6,11 +6,11 @@ spec:
   capacity:
     storage: 10Gi
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   csi:
     driver: cinder.csi.openstack.org
     ## EDIT BELOW: replace the placeholder 'xxxxxxxx-xxxx-xxxx' with your volumes UUID
-    volumeHandle: xxxxxxxx-xxxx-xxxx
+    volumeHandle: bb17ef0f-26af-4066-a31d-066a73c09f5a
   persistentVolumeReclaimPolicy: Retain
   storageClassName: manual
   claimRef:
@@ -26,11 +26,11 @@ spec:
   capacity:
     storage: 10Gi
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   csi:
     driver: cinder.csi.openstack.org
     ## EDIT BELOW: replace the placeholder 'xxxxxxxx-xxxx-xxxx' with your volumes UUID
-    volumeHandle: xxxxxxxx-xxxx-xxxx
+    volumeHandle: b17f1c5c-23d0-49b3-8cd8-1824d400b4c1
   persistentVolumeReclaimPolicy: Retain
   storageClassName: manual
   claimRef:
