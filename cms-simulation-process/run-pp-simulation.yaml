@@ -19,13 +19,13 @@ spec:
       - name: bucket
         value: mirastorage
       - name: dataName
-        value: "merge-testing"
+        value: "production-testing"
       ### EDIT BELOW: replace the placeholder 'fragments.py' with the file name of your fragment
       - name: fragFileName
         value: "fragments.py"
       ### EDIT BELOW: replace the placeholder '10' with the amount of events you want to process
       - name: totEvents
-        value: 10
+        value: 6400
       - name: jobsPerNode
         value: 2 # The workflow has been tested with nodes that only fit 2 jobs per node
       ### EDIT BELOW: replace the placeholder '2' with the number of nodes in your cluster
@@ -950,23 +950,23 @@ spec:
           FILESIZE=$(stat -c%s "$FILENAME") # in bytes
 
           JOBS_PER_NODE={{inputs.parameters.jobsPerNode}}
-          N_JOBS={{inputs.parameters.nNodes}} * JOBS_PER_NODE
+          N_JOBS=$(( {{inputs.parameters.nNodes}} * $JOBS_PER_NODE ))
 
           OUTPUT_FILESIZE=2000000000 # 2GB is the target size
 
-          INPUT_FILES_IN_OUTPUT=$((OUTPUT_FILESIZE/$FILESIZE))
+          INPUT_FILES_IN_OUTPUT=$(($OUTPUT_FILESIZE / $FILESIZE))
 
-          if [[ INPUT_FILES_IN_OUTPUT -ge $N_JOBS ]] ; then
+          if [[ $INPUT_FILES_IN_OUTPUT -ge $N_JOBS ]] ; then
             INPUT_FILES_IN_OUTPUT=$N_JOBS
           fi
 
           N_OF_OUTPUT_FILES=$(($N_JOBS/$INPUT_FILES_IN_OUTPUT))
 
-          if [[ $(($N_JOBS%$INPUT_FILES_IN_OUTPUT)) != 0 ]]; then
+          if [[ $(($N_JOBS % $INPUT_FILES_IN_OUTPUT)) != 0 ]]; then
             ((  N_OF_OUTPUT_FILES+=1 ))
           fi
 
-          for i in $N_OF_OUTPUT_FILES
+          for i in $(seq 1 $((N_OF_OUTPUT_FILES)))
           do
             START=$(($i))
             END=$(($START+$INPUT_FILES_IN_OUTPUT-1))
@@ -977,13 +977,19 @@ spec:
             fi
 
             FILENAMES_STRING=""
+            VOLUME_NUM=0
+            job=1
 
-            for job in $(seq 0 $(($N_JOBS-1)))
+            for j in $(seq 1 $(($N_JOBS)))
             do
-              # The index of the volume where the file of a certain index is, is given by the ceiling rounded division of the file index and the amount of jobs on one node
-              # Bash does not support ceiling rounding natively, so this is done with a math trick
-              VOLUME_NUM=$(( (job / $JOBS_PER_NODE) + (job % $JOBS_PER_NODE > 0)))
-              FILENAMES_STRING+="/data/$VOLUME_NUM/NANO/${LIST_OF_INDECES[job]}.root "
+              # Move from mount to another if the job index goes over the JOBS_PER_NODE.
+              # e.g. job number 3 is on volume 2 so the dir path should be changed to /data/2/NANO from /data/1/NANO
+              if [[ $(($job % $JOBS_PER_NODE)) == 1 ]] ; then
+                (( VOLUME_NUM+=1 ))
+                job=1
+              fi
+              FILENAMES_STRING+="/data/$VOLUME_NUM/NANO/${LIST_OF_INDECES[job-1]}.root "
+              (( job+=1 ))
             done
             
             hadd -f /code/output/output_$i.root $FILENAMES_STRING
@@ -1037,8 +1043,6 @@ spec:
         image: python:3.11-slim
         command: [bash]
         source: |
-          import uproot
-          import os
           set -e
 
           pip install --no-cache-dir uproot awkward vector matplotlib
