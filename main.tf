@@ -55,8 +55,7 @@ resource "openstack_blockstorage_volume_v3" "volume1" {
     name              = "volume_1"
     description       = "Volume for computing node 1"
     size              = 10
-    region            = "dc3-a"
-    availability_zone = "dc3-a"
+    availability_zone = "nova"
 
 }
 
@@ -64,8 +63,7 @@ resource "openstack_blockstorage_volume_v3" "volume2" {
     name              = "volume_2"
     description       = "Volume for computing node 2"
     size              = 10
-    region            = "dc3-a"
-    availability_zone = "dc3-a"
+    availability_zone = "nova"
 
 }
 
