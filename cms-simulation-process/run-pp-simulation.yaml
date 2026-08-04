@@ -17,15 +17,15 @@ spec:
     parameters:
       ### EDIT BELOW: replace the placeholder 'yourstorage' with the name of your object storage
       - name: bucket
-        value: mirastorage
+        value: yourstorage
       - name: dataName
-        value: "production-testing"
+        value: "dataName"
       ### EDIT BELOW: replace the placeholder 'fragments.py' with the file name of your fragment
       - name: fragFileName
         value: "fragments.py"
       ### EDIT BELOW: replace the placeholder '10' with the amount of events you want to process
       - name: totEvents
-        value: 6400
+        value: 10
       - name: jobsPerNode
         value: 2 # The workflow has been tested with nodes that only fit 2 jobs per node
       ### EDIT BELOW: replace the placeholder '2' with the number of nodes in your cluster
@@ -363,34 +363,33 @@ spec:
           nNodes = {{inputs.parameters.nNodes}}
           totEvents = {{inputs.parameters.totEvents}}
           jobsPerNode = {{inputs.parameters.jobsPerNode}} 
-          if totEvents > 0:
-              eventsPerNode = int(totEvents/nNodes)
-              modEventsPerNode = totEvents % nNodes
-          else:
+          nJobs = jobsPerNode * nNodes
+
+          if totEvents <= 0:
               raise ValueError("Amount of events processed should be greater than zero")
 
           nodeList = [i for i in range(1, nNodes+1)]
-
           dictlist = []
-
+          
           for i in nodeList:
               joblist = []
-
-              if i == nNodes:
-                  eventsPerNode = eventsPerNode + modEventsPerNode
                   
               for j in range(1, jobsPerNode+1):
-                  eventsInJob = int(eventsPerNode/2)
-                  modEventsInJob = eventsPerNode % 2
+                  eventsInJobEven = int(totEvents/nJobs)
+                  modEventsInJob = totEvents % nJobs
+
+                  # Try to add the modulus of the division to the first job, but if it goes over 1600 leave it and divide again next iteration
+                  eventsInJob = eventsInJobEven + modEventsInJob if eventsInJobEven + modEventsInJob <= 1600 else 1600
 
                   jobItem = { "jobIndex": j,
                       "eventsInJob": eventsInJob}
                   
-                  if j == 2:
-                      jobItem = { "jobIndex": j,
-                      "eventsInJob": eventsInJob + modEventsInJob}
-
                   joblist.append(jobItem)
+
+                  # Substract the amount of events bound to this job, so that the modulus is different next time
+                  totEvents -= eventsInJob
+                  nJobs -= 1
+
 
               nodeItem = {"nodeIndex": i, "jobList": joblist}
               dictlist.append(nodeItem)
