@@ -355,6 +355,8 @@ spec:
               tmp_file.write(str(value))
 
     - name: gen-template
+      retryStrategy:
+        limit: "3"
       inputs:
         parameters:
           - name: bucket
@@ -461,6 +463,8 @@ spec:
             memory: "2Gi"
 
     - name: sim-template
+      retryStrategy:
+        limit: "3"
       inputs:
         parameters:
           - name: dataName
@@ -526,6 +530,8 @@ spec:
           cernopendata-client get-file-locations --recid 30595 --protocol xrootd > /data/pileup_file_list.txt
 
     - name: digi2raw-template
+      retryStrategy:
+        limit: "3"
       inputs:
         parameters:
           - name: dataName
@@ -603,6 +609,8 @@ spec:
 
 
     - name: hlt-template
+      retryStrategy:
+        limit: "3"
       inputs:
         parameters:
           - name: dataName
@@ -660,6 +668,8 @@ spec:
             memory: "2Gi"
 
     - name: reco-template
+      retryStrategy:
+        limit: "3"
       inputs:
         parameters:
           - name: dataName
@@ -714,6 +724,8 @@ spec:
             memory: "2Gi"
 
     - name: pat-template
+      retryStrategy:
+        limit: "3"
       inputs:
         parameters:
           - name: dataName
@@ -768,6 +780,8 @@ spec:
             memory: "2Gi"
 
     - name: nano-template
+      retryStrategy:
+        limit: "3"
       inputs:
         parameters:
           - name: bucket
