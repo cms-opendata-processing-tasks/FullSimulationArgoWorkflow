@@ -285,6 +285,8 @@ spec:
             template: pat-template
             arguments:
               parameters:  
+                - name: bucket
+                  value: "{{inputs.parameters.bucket}}"
                 - name: dataName
                   value: "{{inputs.parameters.dataName}}"
                 - name: nodeIndex
@@ -500,7 +502,7 @@ spec:
           mkdir -p /data/GEN
 
           PYTHON_FILENAME=/data/GEN/GEN{{inputs.parameters.jobIndex}}_cfg.py
-          OUTPUT_FILE=/data/GEN/{{inputs.parameters.jobIndex}}.root
+          OUTPUT_FILE=/data/GEN/GEN_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
           CONDITIONS={{inputs.parameters.conditionsGenSimReco}} # 106X_mcRun2_asymptotic_v13
@@ -577,8 +579,8 @@ spec:
           mkdir -p /data/SIM
 
           PYTHON_FILENAME=/data/SIM/SIM{{inputs.parameters.jobIndex}}_cfg.py
-          OUTPUT_FILE=/data/SIM/{{inputs.parameters.jobIndex}}.root
-          INPUT_FILE=/data/GEN/{{inputs.parameters.jobIndex}}.root
+          OUTPUT_FILE=/data/SIM/SIM_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
+          INPUT_FILE=/data/GEN/GEN_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
           CONDITIONS={{inputs.parameters.conditionsGenSimReco}} # 106X_mcRun2_asymptotic_v13
@@ -646,11 +648,11 @@ spec:
           # Delete useless GEN step root from block storage
           # to make room for future files
 
-          rm /data/GEN/{{inputs.parameters.jobIndex}}.root # TODO: or use rm -i
+          rm /data/GEN/GEN_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
 
           PYTHON_FILENAME=/data/DIGIPremix/DIGIPremix{{inputs.parameters.jobIndex}}_cfg.py
-          OUTPUT_FILE=/data/DIGIPremix/{{inputs.parameters.jobIndex}}.root
-          INPUT_FILE=/data/SIM/{{inputs.parameters.jobIndex}}.root
+          OUTPUT_FILE=/data/DIGIPremix/DIGIPremix_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
+          INPUT_FILE=/data/SIM/SIM_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
           CONDITIONS={{inputs.parameters.conditionsDigiPatNano}}
@@ -721,11 +723,11 @@ spec:
           mkdir -p /data/HLT
 
           # Delete old files to make room for future files
-          rm /data/SIM/{{inputs.parameters.jobIndex}}.root
+          rm /data/SIM/SIM_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
 
           PYTHON_FILENAME=/data/HLT/HLT{{inputs.parameters.jobIndex}}_cfg.py
-          OUTPUT_FILE=/data/HLT/{{inputs.parameters.jobIndex}}.root
-          INPUT_FILE=/data/DIGIPremix/{{inputs.parameters.jobIndex}}.root
+          OUTPUT_FILE=/data/HLT/HLT_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
+          INPUT_FILE=/data/DIGIPremix/DIGIPremix_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
           CONDITIONS={{inputs.parameters.conditionsHLT}}
@@ -777,11 +779,11 @@ spec:
 
           mkdir -p /data/RECO
 
-          rm /data/DIGIPremix/{{inputs.parameters.jobIndex}}.root
+          rm /data/DIGIPremix/DIGIPremix_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
 
           PYTHON_FILENAME=/data/RECO/RECO{{inputs.parameters.jobIndex}}_cfg.py
-          OUTPUT_FILE=/data/RECO/{{inputs.parameters.jobIndex}}.root
-          INPUT_FILE=/data/HLT/{{inputs.parameters.jobIndex}}.root
+          OUTPUT_FILE=/data/RECO/RECO_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
+          INPUT_FILE=/data/HLT/HLT_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
           CONDITIONS={{inputs.parameters.conditionsGenSimReco}}
@@ -801,11 +803,31 @@ spec:
     - name: pat-template
       inputs:
         parameters:
+          - name: bucket
           - name: dataName
           - name: nodeIndex
           - name: jobIndex
           - name: eventsInJob
           - name: conditionsDigiPatNano
+          
+      outputs:
+        artifacts:
+          - name: MiniAOD
+            path: /data/PAT
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/MiniAOD/{{inputs.parameters.jobIndex}}
 
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
@@ -830,11 +852,15 @@ spec:
 
           mkdir -p /data/PAT
 
-          rm /data/HLT/{{inputs.parameters.jobIndex}}.root
+          # Remove if there are old files from previous runs on the volume
+          # This dir should be clean since it is mounted to the object storage
+          find /data/PAT -mtime 1 -delete
+
+          rm /data/HLT/HLT_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
 
           PYTHON_FILENAME=/data/PAT/PAT{{inputs.parameters.jobIndex}}_cfg.py
-          OUTPUT_FILE=/data/PAT/{{inputs.parameters.jobIndex}}.root
-          INPUT_FILE=/data/RECO/{{inputs.parameters.jobIndex}}.root
+          OUTPUT_FILE=/data/PAT/MiniAOD_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
+          INPUT_FILE=/data/RECO/RECO_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
           CONDITIONS={{inputs.parameters.conditionsDigiPatNano}}
@@ -860,6 +886,24 @@ spec:
           - name: jobIndex
           - name: eventsInJob
           - name: conditionsDigiPatNano
+      outputs:
+        artifacts:
+         - name: NanoAOD
+           path: /data/NANO
+           archive:
+             none: {}
+           s3:
+             endpoint: s3.pub1.infomaniak.cloud
+             bucket: "{{inputs.parameters.bucket}}"
+             region: us-east-1
+             accessKeySecret:
+               name: s3-credentials
+               key: S3_ACCESS_KEY_ID
+             secretKeySecret:
+               name: s3-credentials
+               key: S3_SECRET_ACCESS_KEY
+             insecure: false
+             key: FullSim/{{inputs.parameters.dataName}}/NanoAOD/{{inputs.parameters.jobIndex}}
 
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
@@ -885,11 +929,15 @@ spec:
           sudo mkdir -p /data/NANO
           sudo chown -R cmsusr:cmsusr /data/NANO
 
-          rm /data/RECO/{{inputs.parameters.jobIndex}}.root
+          # Remove if there are old files from previous runs on the volume
+          # This dir should be clean since it is mounted to the object storage
+          find /data/NANO -mtime 1 -delete
+          
+          rm /data/RECO/RECO_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
 
           PYTHON_FILENAME=NANO{{inputs.parameters.jobIndex}}_cfg.py
-          OUTPUT_FILE=/data/NANO/{{inputs.parameters.jobIndex}}.root
-          INPUT_FILE=/data/PAT/{{inputs.parameters.jobIndex}}.root
+          OUTPUT_FILE=/data/NANO/NANO_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
+          INPUT_FILE=/data/PAT/MiniAOD_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
           CONDITIONS={{inputs.parameters.conditionsDigiPatNano}}
@@ -931,7 +979,7 @@ spec:
                 name: s3-credentials
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}
+              key: FullSim/{{inputs.parameters.dataName}}/results
       
       script:
         image: gitlab-registry.cern.ch/cms-cloud/root-vnc:latest
@@ -945,7 +993,7 @@ spec:
           mkdir -p /code/output /data/1 /data/2
 
           # First get one file to get an idea of the file size before merge
-          FILENAME="/data/1/NANO/1.root"
+          FILENAME="/data/1/NANO/NANO_node1_job1.root"
           FILESIZE=$(stat -c%s "$FILENAME") # in bytes
 
           JOBS_PER_NODE={{inputs.parameters.jobsPerNode}}
@@ -987,7 +1035,7 @@ spec:
                 (( VOLUME_NUM+=1 ))
                 job=1
               fi
-              FILENAMES_STRING+="/data/$VOLUME_NUM/NANO/${LIST_OF_INDECES[job-1]}.root "
+              FILENAMES_STRING+="/data/$VOLUME_NUM/NANO/node${VOLUME_NUM}_job${LIST_OF_INDECES[job-1]}.root "
               (( job+=1 ))
             done
             
@@ -1017,7 +1065,7 @@ spec:
                 name: s3-credentials
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}
+              key: FullSim/{{inputs.parameters.dataName}}/results
 
       outputs:
         artifacts:
