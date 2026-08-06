@@ -48,6 +48,25 @@ resource "infomaniak_kaas_instance_pool" "workers" {
     max_instances               = 2
 }
 
+# Create the volumes for each computing node
+# Amount of nodes now 2
+
+resource "openstack_blockstorage_volume_v3" "volume1" {
+    name              = "volume_1"
+    description       = "Volume for computing node 1"
+    size              = 10
+    availability_zone = "nova"
+
+}
+
+resource "openstack_blockstorage_volume_v3" "volume2" {
+    name              = "volume_2"
+    description       = "Volume for computing node 2"
+    size              = 10
+    availability_zone = "nova"
+
+}
+
 output "kubeconfig" {
     value = infomaniak_kaas.cluster.kubeconfig
     sensitive = true
