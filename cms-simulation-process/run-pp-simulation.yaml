@@ -17,17 +17,20 @@ spec:
     parameters:
       ### EDIT BELOW: replace the placeholder 'yourstorage' with the name of your object storage
       - name: bucket
-        value: yourstorage
+        value: mirastorage
       - name: dataName
-        value: "dataName"
+        value: "lhe-testing"
       ### EDIT BELOW: replace the placeholder 'fragments.py' with the file name of your fragment
-      - name: fragFileName
-        value: "fragments.py"
+      - name: inputFileName
+        value: "fragment.py"
+      ### EDIT BELOW: if you are using the LHE format in event generation, give the name of your input gridpack file
+      - name: gridpackName
+        value: "gridpack.tar.xz"
       ### EDIT BELOW: replace the placeholder '10' with the amount of events you want to process
       - name: totEvents
         value: 10
       - name: jobsPerNode
-        value: 2 # The workflow has been tested with nodes that only fit 2 jobs per node
+        value: 1 # The workflow has been tested with nodes that only fit 2 jobs per node
       ### EDIT BELOW: replace the placeholder '2' with the number of nodes in your cluster
       - name: nNodes
         value: 2
@@ -35,8 +38,8 @@ spec:
       - name: runYear
         value: "2016"
       ### EDIT BELOW: If you have already completed the LHE GEN step change the boolean to true
-      - name: startFromSim
-        value: false
+      - name: useLHE
+        value: true
 
   templates:
     - name: cms-full-sim
@@ -44,11 +47,12 @@ spec:
         parameters:
           - name: bucket
           - name: dataName
-          - name: fragFileName
+          - name: inputFileName
+          - name: gridpackName
           - name: totEvents
           - name: jobsPerNode
           - name: runYear
-          - name: startFromSim
+          - name: useLHE
           - name: nNodes
 
       steps:
@@ -80,8 +84,10 @@ spec:
                 value: "{{inputs.parameters.bucket}}"
               - name: dataName
                 value: "{{inputs.parameters.dataName}}"
-              - name: fragFileName
-                value: "{{inputs.parameters.fragFileName}}"
+              - name: inputFileName
+                value: "{{inputs.parameters.inputFileName}}"
+              - name: gridpackName
+                value: "{{inputs.parameters.gridpackName}}"
               - name: nodeIndex
                 value: "{{item.nodeIndex}}"
               - name: conditionsGenSimReco
@@ -92,8 +98,8 @@ spec:
                 value: "{{steps.define-parameters.outputs.parameters.conditionsHLT}}"
               - name: beamspot
                 value: "{{steps.define-parameters.outputs.parameters.beamspot}}"
-              - name: startFromSim
-                value: "{{inputs.parameters.startFromSim}}"
+              - name: useLHE
+                value: "{{inputs.parameters.useLHE}}"
               - name: jobList
                 value: "{{item.jobList}}"
             withParam: "{{steps.divide-jobs.outputs.result}}"
@@ -111,8 +117,8 @@ spec:
               - name: jobsPerNode
                 value: "{{inputs.parameters.jobsPerNode}}"
 
-        - - name: validate-example
-            template: validate-template
+        - - name: example-plots
+            template: example-plots-template
             arguments:
               parameters:
               - name: bucket
@@ -126,13 +132,14 @@ spec:
         parameters:
           - name: bucket
           - name: dataName
-          - name: fragFileName
+          - name: inputFileName
+          - name: gridpackName
           - name: nodeIndex
           - name: conditionsGenSimReco
           - name: conditionsDigiPatNano
           - name: conditionsHLT
           - name: beamspot
-          - name: startFromSim
+          - name: useLHE
           - name: jobList
 
       steps:
@@ -150,8 +157,10 @@ spec:
                   value: "{{inputs.parameters.bucket}}"
                 - name: dataName
                   value: "{{inputs.parameters.dataName}}"
-                - name: fragFileName
-                  value: "{{inputs.parameters.fragFileName}}"
+                - name: inputFileName
+                  value: "{{inputs.parameters.inputFileName}}"
+                - name: gridpackName
+                  value: "{{inputs.parameters.gridpackName}}"
                 - name: nodeIndex
                   value: "{{inputs.parameters.nodeIndex}}"
                 - name: jobIndex
@@ -166,8 +175,8 @@ spec:
                   value: "{{inputs.parameters.conditionsHLT}}"
                 - name: beamspot
                   value: "{{inputs.parameters.beamspot}}"
-                - name: startFromSim
-                  value: "{{inputs.parameters.startFromSim}}"
+                - name: useLHE
+                  value: "{{inputs.parameters.useLHE}}"
             withParam: "{{inputs.parameters.jobList}}"
 
     - name: run-process-job-template
@@ -177,7 +186,8 @@ spec:
         parameters:
           - name: bucket
           - name: dataName
-          - name: fragFileName
+          - name: inputFileName
+          - name: gridpackName
           - name: nodeIndex
           - name: jobIndex
           - name: eventsInJob
@@ -185,20 +195,44 @@ spec:
           - name: conditionsDigiPatNano
           - name: conditionsHLT
           - name: beamspot
-          - name: startFromSim
+          - name: useLHE
 
       steps:
-        - - name: gen
-            template: gen-template
-            when: "{{inputs.parameters.startFromSim}} == false"
+        - - name: lhe-gen
+            template: lhe-gen-template
+            when: "{{inputs.parameters.useLHE}} == true"
             arguments:
               parameters:
                 - name: bucket
                   value: "{{inputs.parameters.bucket}}"
                 - name: dataName
                   value: "{{inputs.parameters.dataName}}"
-                - name: fragFileName
-                  value: "{{inputs.parameters.fragFileName}}"
+                - name: inputFileName
+                  value: "{{inputs.parameters.inputFileName}}"
+                - name: gridpackName
+                  value: "{{inputs.parameters.gridpackName}}"
+                - name: nodeIndex
+                  value: "{{inputs.parameters.nodeIndex}}"
+                - name: jobIndex
+                  value: "{{inputs.parameters.jobIndex}}"
+                - name: eventsInJob
+                  value: "{{inputs.parameters.eventsInJob}}"
+                - name: conditionsGenSimReco
+                  value: "{{inputs.parameters.conditionsGenSimReco}}"
+                - name: beamspot
+                  value: "{{inputs.parameters.beamspot}}"
+
+        - - name: gen
+            template: gen-template
+            when: "{{inputs.parameters.useLHE}} == false"
+            arguments:
+              parameters:
+                - name: bucket
+                  value: "{{inputs.parameters.bucket}}"
+                - name: dataName
+                  value: "{{inputs.parameters.dataName}}"
+                - name: inputFileName
+                  value: "{{inputs.parameters.inputFileName}}"
                 - name: nodeIndex
                   value: "{{inputs.parameters.nodeIndex}}"
                 - name: jobIndex
@@ -440,14 +474,15 @@ spec:
             with open(f"/tmp/params/{key}", "w") as tmp_file:
               tmp_file.write(str(value))
 
-    - name: gen-template
+    - name: lhe-gen-template
       retryStrategy:
         limit: "3"
       inputs:
         parameters:
           - name: bucket
           - name: dataName
-          - name: fragFileName
+          - name: inputFileName
+          - name: gridpackName
           - name: jobIndex
           - name: eventsInJob
           - name: conditionsGenSimReco
@@ -455,7 +490,125 @@ spec:
           - name: nodeIndex
         
         artifacts:
-          - name: GEN-config
+          - name: input-files
+            path: /code/CMSSW_10_6_30/src/Configuration/GenProduction/python # fix the path to better
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1 # placeholder, To-do
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/input # path where it stays in the cloud storage
+      
+      script:
+        image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
+        command: [bash]
+        volumeMounts:
+          - name: volume{{inputs.parameters.nodeIndex}}
+            mountPath: /data
+        source: |
+          # Init first with sudo and then cmsusr
+          echo "Initializing cmsenv"
+          sudo --preserve-env=CMS_INSTALL_DIR,CMSSW_VERSION,SCRAM_ARCH /opt/cms/entrypoint.sh
+          source /opt/cms/entrypoint.sh
+
+          cd /code/CMSSW_10_6_30/src/
+
+          echo "Changing ownership"
+          sudo chown -R cmsusr:cmsusr /data
+          sudo chown -R cmsusr:cmsusr /code/CMSSW_10_6_30
+          echo "Now in" $(pwd)
+
+
+          mkdir -p Configuration/GenProduction/python
+
+          # Move the gridpack to the working directory
+          mv Configuration/GenProduction/python/{{inputs.parameters.gridpackName}} .
+          
+          scram b
+
+          # Make a dir where all the different jobs store the .root output files from this step
+          # --> this dir is mounted in the cloud storage
+
+          mkdir -p /data/GEN
+
+          PYTHON_FILENAME=/data/GEN/GEN{{inputs.parameters.jobIndex}}_cfg.py
+          OUTPUT_FILE=/data/GEN/GEN_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
+          EVENTS={{inputs.parameters.eventsInJob}}
+
+          CONDITIONS={{inputs.parameters.conditionsGenSimReco}} # 106X_mcRun2_asymptotic_v13
+          BEAMSPOT={{inputs.parameters.beamspot}} # Realistic25ns13TeV2016Collision
+          
+          cmsDriver.py Configuration/GenProduction/python/{{inputs.parameters.inputFileName}} --python_filename $PYTHON_FILENAME --eventcontent RAWSIM,LHE \
+          --customise Configuration/DataProcessing/Utils.addMonitoring --datatier GEN,LHE --fileout file:$OUTPUT_FILE \
+          --conditions $CONDITIONS --beamspot $BEAMSPOT \
+          --customise_commands process.source.numberEventsInLuminosityBlock="cms.untracked.uint32(100)" --step LHE,GEN \
+          --geometry DB:Extended --era Run2_2016 --no_exec --mc -n $EVENTS
+
+          # To-do: find out what to do with the numberEventsInLuminosityBlock ^
+          # some datasets have it 100, some have it 2500 or something
+
+          # To-do: Do all LHE GEN need this LHAPDF file, or something else --> figure out a way to extract the necessary LHAPDF from config like in regular GEN       
+          LHAPDF_SET_NAME="NNPDF31_nnlo_as_0118_nf_4_mc_hessian"
+
+          # cd to the LHAPDF dir
+          cd $LHAPDF_DATA_PATH
+          # Remove other mentions of this dataset
+          sudo rm -fr $LHAPDF_SET_NAME
+
+          echo "in $LHAPDF_DATA_PATH"
+
+          echo "LHAPDF_SET_NAME" $LHAPDF_SET_NAME
+          echo "installing..."
+          sudo wget -q 'https://lhapdfsets.web.cern.ch/current/'"${LHAPDF_SET_NAME}"'.tar.gz'
+          sudo tar xf "$LHAPDF_SET_NAME"'.tar.gz'
+          sudo chown -R cmsinst:cmsinst .
+          sudo rm -r "$LHAPDF_SET_NAME"'.tar.gz'
+
+          LHAPDF_SET_NAME="NNPDF31_nnlo_as_0118"
+
+          # Remove other mentions of this dataset
+          sudo rm -fr $LHAPDF_SET_NAME
+
+          echo "LHAPDF_SET_NAME" $LHAPDF_SET_NAME
+          echo "installing..."
+          sudo wget -q 'https://lhapdfsets.web.cern.ch/current/'"${LHAPDF_SET_NAME}"'.tar.gz'
+          sudo tar xf "$LHAPDF_SET_NAME"'.tar.gz'
+          sudo chown -R cmsinst:cmsinst .
+          sudo rm -r "$LHAPDF_SET_NAME"'.tar.gz'
+
+          echo "Finished LHAPDF installation"
+          
+
+          cd /code/CMSSW_10_6_30/src/
+
+
+          cmsRun $PYTHON_FILENAME
+    
+
+    - name: gen-template
+      retryStrategy:
+        limit: "3"
+      inputs:
+        parameters:
+          - name: bucket
+          - name: dataName
+          - name: inputFileName
+          - name: jobIndex
+          - name: eventsInJob
+          - name: conditionsGenSimReco
+          - name: beamspot
+          - name: nodeIndex
+        
+        artifacts:
+          - name: input-fragment
             path: /code/CMSSW_10_6_30/src/Configuration/GenProduction/python/fragments.py # path for file in container
             archive:
               none: {}
@@ -470,7 +623,7 @@ spec:
                 name: s3-credentials
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/{{inputs.parameters.fragFileName}} # path where it stays in the cloud storage
+              key: FullSim/{{inputs.parameters.dataName}}/input/{{inputs.parameters.inputFileName}} # path where it stays in the cloud storage
       
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
@@ -479,8 +632,6 @@ spec:
           - name: volume{{inputs.parameters.nodeIndex}}
             mountPath: /data
         source: |
-          # write script here
-
           # Init first with sudo and then cmsusr
           echo "Initializing cmsenv"
           sudo --preserve-env=CMS_INSTALL_DIR,CMSSW_VERSION,SCRAM_ARCH /opt/cms/entrypoint.sh
@@ -540,7 +691,7 @@ spec:
           # If the configuration contained mentions of LHAPDF, start installation
           if [[ $LHAPDF_SET_NAME != "" ]]; then
             echo "LHAPDF_SET_NAME" $LHAPDF_SET_NAME
-            sudo wget 'https://lhapdfsets.web.cern.ch/current/'"${LHAPDF_SET_NAME}"'.tar.gz'
+            sudo wget -q 'https://lhapdfsets.web.cern.ch/current/'"${LHAPDF_SET_NAME}"'.tar.gz'
             sudo tar xf "$LHAPDF_SET_NAME"'.tar.gz'
             sudo chown -R cmsinst:cmsinst .
             sudo rm -r "$LHAPDF_SET_NAME"'.tar.gz'
@@ -1059,7 +1210,7 @@ spec:
             do
               # Move from mount to another if the job index goes over the JOBS_PER_NODE.
               # e.g. job number 3 is on volume 2 so the dir path should be changed to /data/2/NANO from /data/1/NANO
-              if [[ $(($job % $JOBS_PER_NODE)) == 1 ]] ; then
+              if [[ $(($job % $JOBS_PER_NODE)) == 1 || $JOBS_PER_NODE == 1]] ; then
                 (( VOLUME_NUM+=1 ))
                 job=1
               fi
@@ -1071,7 +1222,7 @@ spec:
 
           done
 
-    - name: validate-template
+    - name: example-plots-template
       inputs:
         parameters:
           - name: bucket
