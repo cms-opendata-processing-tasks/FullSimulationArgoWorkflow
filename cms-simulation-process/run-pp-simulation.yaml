@@ -507,7 +507,6 @@ spec:
 
           CONDITIONS={{inputs.parameters.conditionsGenSimReco}} # 106X_mcRun2_asymptotic_v13
           BEAMSPOT={{inputs.parameters.beamspot}} # Realistic25ns13TeV2016Collision
-
           
           cmsDriver.py Configuration/GenProduction/python/fragments.py --python_filename $PYTHON_FILENAME --eventcontent RAWSIM \
           --customise Configuration/DataProcessing/Utils.addMonitoring --datatier GEN --fileout file:$OUTPUT_FILE \
@@ -519,21 +518,35 @@ spec:
           # some datasets have it 100, some have it 2500 or something
 
           # In the generated python file, find which LHAPDF set is needed
-          # To-do: this works if only one LHAPDF set is needed and it is configured exactly like this
-          LHAPDF_SET_NAME="$(grep -oP "PDF:pSet=LHAPDF6:\K.*?(?=')" $PYTHON_FILENAME)"
-          #LHAPDF_SET_NAME="NNPDF31_nnlo_as_0118"
 
+          # To-do: now the script just takes the first LHAPDF set of the ones mentioned in the config. In the future, make a for loop and go through all datasets and install them all
+          # Thusfar no dataset has needed multiple LHAPDF sets so this has not been necessary
+
+          # Grep all the mentions of LHAPDF in the configuration file
+          LHAPDF_MENTIONS="$(grep -oP "PDF:pSet=LHAPDF6:\K.*?(?=')" $PYTHON_FILENAME)"
+
+          # Take the first word of those results       
+          LHAPDF_SET_NAME=$(echo $LHAPDF_MENTIONS| cut -d' ' -f 2)
+
+          # cd to the LHAPDF dir
           cd $LHAPDF_DATA_PATH
-          sudo rm -r $LHAPDF_SET_NAME
+          # Remove other mentions of this dataset
+          sudo rm -fr $LHAPDF_SET_NAME
 
           echo "in $LHAPDF_DATA_PATH"
 
-          sudo wget 'https://lhapdfsets.web.cern.ch/current/'"${LHAPDF_SET_NAME}"'.tar.gz'
-          sudo tar xf "$LHAPDF_SET_NAME"'.tar.gz'
-          sudo chown -R cmsinst:cmsinst .
-          sudo rm -r "$LHAPDF_SET_NAME"'.tar.gz'
+          # If the configuration contained mentions of LHAPDF, start installation
+          if [[ $LHAPDF_SET_NAME != "" ]]; then
+            echo "LHAPDF_SET_NAME" $LHAPDF_SET_NAME
+            sudo wget 'https://lhapdfsets.web.cern.ch/current/'"${LHAPDF_SET_NAME}"'.tar.gz'
+            sudo tar xf "$LHAPDF_SET_NAME"'.tar.gz'
+            sudo chown -R cmsinst:cmsinst .
+            sudo rm -r "$LHAPDF_SET_NAME"'.tar.gz'
 
-          echo "Did LHAPDF installation"
+            echo "Did LHAPDF installation"
+          else
+            echo "No LHAPDF defined in the configuration, skipping LHAPDF installation."
+          fi
 
           cd /code/CMSSW_10_6_30/src/
 
@@ -648,7 +661,7 @@ spec:
           # Delete useless GEN step root from block storage
           # to make room for future files
 
-          rm /data/GEN/GEN_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
+          rm -f /data/GEN/GEN_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
 
           PYTHON_FILENAME=/data/DIGIPremix/DIGIPremix{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/DIGIPremix/DIGIPremix_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
@@ -723,7 +736,7 @@ spec:
           mkdir -p /data/HLT
 
           # Delete old files to make room for future files
-          rm /data/SIM/SIM_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
+          rm -f /data/SIM/SIM_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
 
           PYTHON_FILENAME=/data/HLT/HLT{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/HLT/HLT_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
@@ -779,7 +792,7 @@ spec:
 
           mkdir -p /data/RECO
 
-          rm /data/DIGIPremix/DIGIPremix_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
+          rm -f /data/DIGIPremix/DIGIPremix_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
 
           PYTHON_FILENAME=/data/RECO/RECO{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/RECO/RECO_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
@@ -854,9 +867,9 @@ spec:
 
           # Remove if there are old files from previous runs on the volume
           # This dir should be clean since it is mounted to the object storage
-          find /data/PAT -mtime 1 -delete
+          find /data/PAT/ -mtime +1 -delete
 
-          rm /data/HLT/HLT_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
+          rm -f /data/HLT/HLT_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
 
           PYTHON_FILENAME=/data/PAT/PAT{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/PAT/MiniAOD_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
@@ -888,22 +901,22 @@ spec:
           - name: conditionsDigiPatNano
       outputs:
         artifacts:
-         - name: NanoAOD
-           path: /data/NANO
-           archive:
-             none: {}
-           s3:
-             endpoint: s3.pub1.infomaniak.cloud
-             bucket: "{{inputs.parameters.bucket}}"
-             region: us-east-1
-             accessKeySecret:
-               name: s3-credentials
-               key: S3_ACCESS_KEY_ID
-             secretKeySecret:
-               name: s3-credentials
-               key: S3_SECRET_ACCESS_KEY
-             insecure: false
-             key: FullSim/{{inputs.parameters.dataName}}/NanoAOD/{{inputs.parameters.jobIndex}}
+          - name: NanoAOD
+            path: /data/NANO
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/NanoAOD/{{inputs.parameters.jobIndex}}
 
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
@@ -931,9 +944,9 @@ spec:
 
           # Remove if there are old files from previous runs on the volume
           # This dir should be clean since it is mounted to the object storage
-          find /data/NANO -mtime 1 -delete
-          
-          rm /data/RECO/RECO_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
+          find /data/NANO -mtime +1 -delete
+
+          rm -f /data/RECO/RECO_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
 
           PYTHON_FILENAME=NANO{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/NANO/NANO_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
@@ -989,6 +1002,7 @@ spec:
             mountPath: /data/1
           - name: volume2
             mountPath: /data/2
+
         source: |
           mkdir -p /code/output /data/1 /data/2
 
@@ -1035,7 +1049,7 @@ spec:
                 (( VOLUME_NUM+=1 ))
                 job=1
               fi
-              FILENAMES_STRING+="/data/$VOLUME_NUM/NANO/node${VOLUME_NUM}_job${LIST_OF_INDECES[job-1]}.root "
+              FILENAMES_STRING+="/data/$VOLUME_NUM/NANO/NANO_node${VOLUME_NUM}_job${LIST_OF_INDECES[job-1]}.root "
               (( job+=1 ))
             done
             
