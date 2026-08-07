@@ -12,25 +12,30 @@ spec:
     - name: volume2
       persistentVolumeClaim:
         claimName: pvc-2
+    - name: volume3
+      persistentVolumeClaim:
+        claimName: pvc-3
+    - name: volume4
+      persistentVolumeClaim:
+        claimName: pvc-4
             
   arguments:
     parameters:
       ### EDIT BELOW: replace the placeholder 'yourstorage' with the name of your object storage
       - name: bucket
-        value: mirastorage
+        value: yourstorage
       - name: dataName
-        value: "lhe-testing"
-      ### EDIT BELOW: replace the placeholder 'fragments.py' with the file name of your fragment
+        value: "dataName"
+      ### EDIT BELOW: replace the placeholder 'fragment.py' with the file name of your fragment
       - name: inputFileName
         value: "fragment.py"
-      ### EDIT BELOW: if you are using the LHE format in event generation, give the name of your input gridpack file
-      - name: gridpackName
-        value: "gridpack.tar.xz"
+      - name: cardName
+        value: "wplustest_4f_LO" #"ChargedHiggs_taunu_heavy_NLO_M700"
       ### EDIT BELOW: replace the placeholder '10' with the amount of events you want to process
       - name: totEvents
         value: 10
       - name: jobsPerNode
-        value: 1 # The workflow has been tested with nodes that only fit 2 jobs per node
+        value: 2 # The workflow has been tested with nodes that only fit 2 jobs per node
       ### EDIT BELOW: replace the placeholder '2' with the number of nodes in your cluster
       - name: nNodes
         value: 2
@@ -48,7 +53,7 @@ spec:
           - name: bucket
           - name: dataName
           - name: inputFileName
-          - name: gridpackName
+          - name: cardName
           - name: totEvents
           - name: jobsPerNode
           - name: runYear
@@ -76,6 +81,18 @@ spec:
                 - name: runYear
                   value: "{{inputs.parameters.runYear}}"
 
+        - - name: generate-gridpack
+            template: generate-gridpack-template
+            when: "{{inputs.parameters.useLHE}} == true"
+            arguments:
+              parameters:
+                - name: bucket
+                  value: "{{inputs.parameters.bucket}}"
+                - name: dataName
+                  value: "{{inputs.parameters.dataName}}"
+                - name: cardName
+                  value: "{{inputs.parameters.cardName}}"
+
         - - name: start-process-on-node
             template: start-process-on-node-template
             arguments:
@@ -86,8 +103,8 @@ spec:
                 value: "{{inputs.parameters.dataName}}"
               - name: inputFileName
                 value: "{{inputs.parameters.inputFileName}}"
-              - name: gridpackName
-                value: "{{inputs.parameters.gridpackName}}"
+              - name: cardName
+                value: "{{inputs.parameters.cardName}}"
               - name: nodeIndex
                 value: "{{item.nodeIndex}}"
               - name: conditionsGenSimReco
@@ -133,7 +150,7 @@ spec:
           - name: bucket
           - name: dataName
           - name: inputFileName
-          - name: gridpackName
+          - name: cardName
           - name: nodeIndex
           - name: conditionsGenSimReco
           - name: conditionsDigiPatNano
@@ -159,8 +176,8 @@ spec:
                   value: "{{inputs.parameters.dataName}}"
                 - name: inputFileName
                   value: "{{inputs.parameters.inputFileName}}"
-                - name: gridpackName
-                  value: "{{inputs.parameters.gridpackName}}"
+                - name: cardName
+                  value: "{{inputs.parameters.cardName}}"
                 - name: nodeIndex
                   value: "{{inputs.parameters.nodeIndex}}"
                 - name: jobIndex
@@ -187,7 +204,7 @@ spec:
           - name: bucket
           - name: dataName
           - name: inputFileName
-          - name: gridpackName
+          - name: cardName
           - name: nodeIndex
           - name: jobIndex
           - name: eventsInJob
@@ -209,8 +226,8 @@ spec:
                   value: "{{inputs.parameters.dataName}}"
                 - name: inputFileName
                   value: "{{inputs.parameters.inputFileName}}"
-                - name: gridpackName
-                  value: "{{inputs.parameters.gridpackName}}"
+                - name: cardName
+                  value: "{{inputs.parameters.cardName}}"
                 - name: nodeIndex
                   value: "{{inputs.parameters.nodeIndex}}"
                 - name: jobIndex
@@ -474,6 +491,99 @@ spec:
             with open(f"/tmp/params/{key}", "w") as tmp_file:
               tmp_file.write(str(value))
 
+    - name: generate-gridpack-template
+      inputs: 
+        parameters:
+          - name: bucket
+          - name: dataName
+          - name: cardName
+        artifacts:
+          - name: cards
+            path: /code/cards
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1 # placeholder, To-do
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/input/cards # path where it stays in the cloud storage
+      outputs:
+        artifacts:
+          - name: gridpack
+            path: /output
+            archive:
+              none: {}
+            s3:
+              endpoint: s3.pub1.infomaniak.cloud
+              bucket: "{{inputs.parameters.bucket}}"
+              region: us-east-1
+              accessKeySecret:
+                name: s3-credentials
+                key: S3_ACCESS_KEY_ID
+              secretKeySecret:
+                name: s3-credentials
+                key: S3_SECRET_ACCESS_KEY
+              insecure: false
+              key: FullSim/{{inputs.parameters.dataName}}/input
+
+      script:
+        image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
+        command: [bash]
+        source: |
+          set -e
+          # This environment is not initiated like the data processing steps, because gridpack generation does not run in a CMSSW release environment
+
+          cd /code
+          sudo chown -R cmsusr:cmsusr cards
+          ls cards
+
+          # To-do: Read from the cards what LHAPDF's are needed
+          # To-do: since the environment is not setup, the LHAPDF_DATA_PATH is not set
+
+          LHAPDF_SET_NAME="NNPDF23_nlo_as_0119"
+          LHAPDF_DATA_PATH=/cvmfs/cms.cern.ch/slc7_amd64_gcc700/external/lhapdf/6.2.3-a2a84f5990d32c24c7240b02577bf55e/share/LHAPDF
+
+          # cd to the LHAPDF dir
+          cd $LHAPDF_DATA_PATH
+          # Remove other mentions of this dataset
+          sudo rm -fr $LHAPDF_SET_NAME
+
+          echo "in $LHAPDF_DATA_PATH"
+
+          echo "LHAPDF_SET_NAME" $LHAPDF_SET_NAME
+          echo "installing..."
+          sudo wget -q 'https://lhapdfsets.web.cern.ch/current/'"${LHAPDF_SET_NAME}"'.tar.gz'
+          sudo tar xf "$LHAPDF_SET_NAME"'.tar.gz'
+          sudo chown -R cmsinst:cmsinst .
+          sudo rm -r "$LHAPDF_SET_NAME"'.tar.gz'
+
+
+          cd /code
+
+          # Clone the gridpack generation code
+          git clone https://gitlab.cern.ch/cms-gen/genproductions_scripts.git
+
+          # Processing data with these Run 2016 qualifies as a UL, change to a branch which fits the architecture
+          cd genproductions_scripts
+          git checkout mg265
+
+          # Only works with MadGraph at the moment
+          cd bin/MadGraph5_aMCatNLO
+          ./gridpack_generation.sh {{inputs.parameters.cardName}} /code/cards . "local" "ALL" slc7_amd64_gcc700 CMSSW_10_6_30
+
+          sudo mkdir /output
+          sudo chown -R cmsusr:cmsusr /output
+          mv /code/genproductions_scripts/bin/MadGraph5_aMCatNLO/{{inputs.parameters.cardName}}_slc7_amd64_gcc700_CMSSW_10_6_30_tarball.tar.xz /output
+          echo "moved gridpack to output"
+          ls /output
+
     - name: lhe-gen-template
       retryStrategy:
         limit: "3"
@@ -482,7 +592,7 @@ spec:
           - name: bucket
           - name: dataName
           - name: inputFileName
-          - name: gridpackName
+          - name: cardName
           - name: jobIndex
           - name: eventsInJob
           - name: conditionsGenSimReco
@@ -530,7 +640,7 @@ spec:
           mkdir -p Configuration/GenProduction/python
 
           # Move the gridpack to the working directory
-          mv Configuration/GenProduction/python/{{inputs.parameters.gridpackName}} .
+          mv Configuration/GenProduction/python/{{inputs.parameters.cardName}}_slc7_amd64_gcc700_CMSSW_10_6_30_tarball.tar.xz .
           
           scram b
 
@@ -584,11 +694,23 @@ spec:
           sudo chown -R cmsinst:cmsinst .
           sudo rm -r "$LHAPDF_SET_NAME"'.tar.gz'
 
+          LHAPDF_SET_NAME="NNPDF23_nlo_as_0119"
+
+          # Remove other mentions of this dataset
+          sudo rm -fr $LHAPDF_SET_NAME
+
+          echo "LHAPDF_SET_NAME" $LHAPDF_SET_NAME
+          echo "installing..."
+          sudo wget -q 'https://lhapdfsets.web.cern.ch/current/'"${LHAPDF_SET_NAME}"'.tar.gz'
+          sudo tar xf "$LHAPDF_SET_NAME"'.tar.gz'
+          sudo chown -R cmsinst:cmsinst .
+          sudo rm -r "$LHAPDF_SET_NAME"'.tar.gz'
+
+
           echo "Finished LHAPDF installation"
           
 
           cd /code/CMSSW_10_6_30/src/
-
 
           cmsRun $PYTHON_FILENAME
     
@@ -702,7 +824,6 @@ spec:
           fi
 
           cd /code/CMSSW_10_6_30/src/
-
 
           cmsRun $PYTHON_FILENAME
           
@@ -1167,6 +1288,10 @@ spec:
             mountPath: /data/1
           - name: volume2
             mountPath: /data/2
+          - name: volume3
+            mountPath: /data/3
+          - name: volume4
+            mountPath: /data/4
 
         source: |
           mkdir -p /code/output /data/1 /data/2
@@ -1210,7 +1335,7 @@ spec:
             do
               # Move from mount to another if the job index goes over the JOBS_PER_NODE.
               # e.g. job number 3 is on volume 2 so the dir path should be changed to /data/2/NANO from /data/1/NANO
-              if [[ $(($job % $JOBS_PER_NODE)) == 1 || $JOBS_PER_NODE == 1]] ; then
+              if [[ $(($job % $JOBS_PER_NODE)) == 1 || $(($JOBS_PER_NODE)) == 1 ]] ; then
                 (( VOLUME_NUM+=1 ))
                 job=1
               fi
