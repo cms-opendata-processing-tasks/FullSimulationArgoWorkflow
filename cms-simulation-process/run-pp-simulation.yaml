@@ -30,7 +30,7 @@ spec:
       - name: inputFileName
         value: "fragment.py"
       - name: cardName
-        value: "wplustest_4f_LO" #"ChargedHiggs_taunu_heavy_NLO_M700"
+        value: "cardName"
       ### EDIT BELOW: replace the placeholder '10' with the amount of events you want to process
       - name: totEvents
         value: 10
@@ -81,17 +81,17 @@ spec:
                 - name: runYear
                   value: "{{inputs.parameters.runYear}}"
 
-        - - name: generate-gridpack
-            template: generate-gridpack-template
-            when: "{{inputs.parameters.useLHE}} == true"
-            arguments:
-              parameters:
-                - name: bucket
-                  value: "{{inputs.parameters.bucket}}"
-                - name: dataName
-                  value: "{{inputs.parameters.dataName}}"
-                - name: cardName
-                  value: "{{inputs.parameters.cardName}}"
+        # - - name: generate-gridpack
+        #     template: generate-gridpack-template
+        #     when: "{{inputs.parameters.useLHE}} == true"
+        #     arguments:
+        #       parameters:
+        #         - name: bucket
+        #           value: "{{inputs.parameters.bucket}}"
+        #         - name: dataName
+        #           value: "{{inputs.parameters.dataName}}"
+        #         - name: cardName
+        #           value: "{{inputs.parameters.cardName}}"
 
         - - name: start-process-on-node
             template: start-process-on-node-template
@@ -424,6 +424,7 @@ spec:
           nodeList = [i for i in range(1, nNodes+1)]
           dictlist = []
           
+
           for i in nodeList:
               joblist = []
                   
@@ -616,7 +617,7 @@ spec:
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
               key: FullSim/{{inputs.parameters.dataName}}/input # path where it stays in the cloud storage
-      
+
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
@@ -649,7 +650,7 @@ spec:
 
           mkdir -p /data/GEN
 
-          PYTHON_FILENAME=/data/GEN/GEN{{inputs.parameters.jobIndex}}_cfg.py
+          PYTHON_FILENAME=/data/GEN/GEN_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/GEN/GEN_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
@@ -713,6 +714,11 @@ spec:
           cd /code/CMSSW_10_6_30/src/
 
           cmsRun $PYTHON_FILENAME
+
+        resources:
+          requests:
+            cpu: "1"
+            memory: "4Gi"
     
 
     - name: gen-template
@@ -746,7 +752,7 @@ spec:
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
               key: FullSim/{{inputs.parameters.dataName}}/input/{{inputs.parameters.inputFileName}} # path where it stays in the cloud storage
-      
+
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
         command: [bash]
@@ -776,7 +782,7 @@ spec:
 
           mkdir -p /data/GEN
 
-          PYTHON_FILENAME=/data/GEN/GEN{{inputs.parameters.jobIndex}}_cfg.py
+          PYTHON_FILENAME=/data/GEN/GEN_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/GEN/GEN_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
 
@@ -829,8 +835,8 @@ spec:
           
         resources:
           requests:
-            cpu: "700m"
-            memory: "2Gi"
+            cpu: "1"
+            memory: "4Gi"
 
     - name: sim-template
       retryStrategy:
@@ -867,7 +873,7 @@ spec:
 
           mkdir -p /data/SIM
 
-          PYTHON_FILENAME=/data/SIM/SIM{{inputs.parameters.jobIndex}}_cfg.py
+          PYTHON_FILENAME=/data/SIM/SIM_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/SIM/SIM_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
           INPUT_FILE=/data/GEN/GEN_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
@@ -884,8 +890,8 @@ spec:
 
         resources:
           requests:
-            cpu: "700m"
-            memory: "2Gi"
+            cpu: "1"
+            memory: "4Gi"
 
           
     - name: pre-digi2raw-template
@@ -941,7 +947,7 @@ spec:
 
           rm -f /data/GEN/GEN_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
 
-          PYTHON_FILENAME=/data/DIGIPremix/DIGIPremix{{inputs.parameters.jobIndex}}_cfg.py
+          PYTHON_FILENAME=/data/DIGIPremix/DIGIPremix_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/DIGIPremix/DIGIPremix_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
           INPUT_FILE=/data/SIM/SIM_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
@@ -960,8 +966,8 @@ spec:
         
         resources:
           requests:
-            cpu: "700m"
-            memory: "2Gi"
+            cpu: "1"
+            memory: "4Gi"
 
     - name: pull-cmssw8-image-template
       initContainers:
@@ -1018,7 +1024,7 @@ spec:
           # Delete old files to make room for future files
           rm -f /data/SIM/SIM_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
 
-          PYTHON_FILENAME=/data/HLT/HLT{{inputs.parameters.jobIndex}}_cfg.py
+          PYTHON_FILENAME=/data/HLT/HLT_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/HLT/HLT_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
           INPUT_FILE=/data/DIGIPremix/DIGIPremix_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
@@ -1037,8 +1043,8 @@ spec:
         
         resources:
           requests:
-            cpu: "700m"
-            memory: "2Gi"
+            cpu: "1"
+            memory: "4Gi"
 
     - name: reco-template
       retryStrategy:
@@ -1076,7 +1082,7 @@ spec:
 
           rm -f /data/DIGIPremix/DIGIPremix_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
 
-          PYTHON_FILENAME=/data/RECO/RECO{{inputs.parameters.jobIndex}}_cfg.py
+          PYTHON_FILENAME=/data/RECO/RECO_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/RECO/RECO_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
           INPUT_FILE=/data/HLT/HLT_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
@@ -1092,8 +1098,8 @@ spec:
         
         resources:
           requests:
-            cpu: "700m"
-            memory: "2Gi"
+            cpu: "1"
+            memory: "4Gi"
 
     - name: pat-template
       retryStrategy:
@@ -1155,7 +1161,7 @@ spec:
 
           rm -f /data/HLT/HLT_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
 
-          PYTHON_FILENAME=/data/PAT/PAT{{inputs.parameters.jobIndex}}_cfg.py
+          PYTHON_FILENAME=/data/PAT/PAT_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/PAT/MiniAOD_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
           INPUT_FILE=/data/RECO/RECO_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
@@ -1171,8 +1177,8 @@ spec:
         
         resources:
           requests:
-            cpu: "700m"
-            memory: "2Gi"
+            cpu: "1"
+            memory: "4Gi"
 
     - name: nano-template
       retryStrategy:
@@ -1202,7 +1208,7 @@ spec:
                 name: s3-credentials
                 key: S3_SECRET_ACCESS_KEY
               insecure: false
-              key: FullSim/{{inputs.parameters.dataName}}/NanoAOD/{{inputs.parameters.jobIndex}}
+              key: FullSim/{{inputs.parameters.dataName}}/NanoAOD
 
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
@@ -1234,7 +1240,7 @@ spec:
 
           rm -f /data/RECO/RECO_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
 
-          PYTHON_FILENAME=NANO{{inputs.parameters.jobIndex}}_cfg.py
+          PYTHON_FILENAME=/data/NANO/NANO_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/NANO/NANO_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
           INPUT_FILE=/data/PAT/MiniAOD_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
           EVENTS={{inputs.parameters.eventsInJob}}
@@ -1250,8 +1256,8 @@ spec:
         
         resources:
           requests:
-            cpu: "700m"
-            memory: "2Gi"
+            cpu: "1"
+            memory: "4Gi"
     
     - name: merge-result-files-template
       inputs:
@@ -1292,7 +1298,7 @@ spec:
             mountPath: /data/3
           - name: volume4
             mountPath: /data/4
-
+          
         source: |
           mkdir -p /code/output /data/1 /data/2
 
