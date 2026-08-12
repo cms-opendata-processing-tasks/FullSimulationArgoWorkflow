@@ -574,8 +574,6 @@ spec:
           # Remove other mentions of this dataset
           sudo rm -fr $LHAPDF_SET_NAME
 
-          echo "in $LHAPDF_DATA_PATH"
-
           echo "LHAPDF_SET_NAME" $LHAPDF_SET_NAME
           echo "installing..."
           sudo wget -q 'https://lhapdfsets.web.cern.ch/current/'"${LHAPDF_SET_NAME}"'.tar.gz'
@@ -726,30 +724,33 @@ spec:
           echo $LIST_OF_DATASETS
           
           # The CMSSW generation step also needs the NNPDF31_nnlo_as_0118
-          
           LIST_OF_DATASETS+=('NNPDF31_nnlo_as_0118')
-
-          # LHAPDF_SET_NAME="NNPDF31_nnlo_as_0118_nf_4_mc_hessian"
 
           # cd to the LHAPDF dir
           cd $LHAPDF_DATA_PATH
 
-          for LHAPDF_SET_NAME in "${LIST_OF_DATASETS[@]}"
-          do
-            # Remove other mentions of this dataset
-            sudo rm -fr $LHAPDF_SET_NAME
+          
 
-            echo "in $LHAPDF_DATA_PATH"
+          if (( ${#LIST_OF_DATASETS[@]} != 0 )); then
+            echo "Starting to install LHAPDFs: ${LIST_OF_DATASETS[@]}"
 
-            echo "LHAPDF_SET_NAME" $LHAPDF_SET_NAME
-            echo "installing..."
-            sudo wget -q 'https://lhapdfsets.web.cern.ch/current/'"${LHAPDF_SET_NAME}"'.tar.gz'
-            sudo tar xf "$LHAPDF_SET_NAME"'.tar.gz'
-            sudo chown -R cmsinst:cmsinst .
-            sudo rm -r "$LHAPDF_SET_NAME"'.tar.gz'
-          done
+            for LHAPDF_SET_NAME in "${LIST_OF_DATASETS[@]}"
+            do
+              # Remove other mentions of this dataset
+              sudo rm -fr $LHAPDF_SET_NAME
 
-          echo "Finished LHAPDF installation"
+              echo "LHAPDF_SET_NAME" $LHAPDF_SET_NAME
+              echo "installing..."
+              sudo wget -q 'https://lhapdfsets.web.cern.ch/current/'"${LHAPDF_SET_NAME}"'.tar.gz'
+              sudo tar xf "$LHAPDF_SET_NAME"'.tar.gz'
+              sudo chown -R cmsinst:cmsinst .
+              sudo rm -r "$LHAPDF_SET_NAME"'.tar.gz'
+            done
+
+            echo "Finished LHAPDF installation"
+          fi
+
+          
           
 
           cd /code/CMSSW_10_6_30/src/
@@ -848,30 +849,33 @@ spec:
           # Thusfar no dataset has needed multiple LHAPDF sets so this has not been necessary
 
           # Grep all the mentions of LHAPDF in the configuration file
-          LHAPDF_MENTIONS="$(grep -oP "PDF:pSet=LHAPDF6:\K.*?(?=')" $PYTHON_FILENAME)"
+          STRING_OF_DATASETS="$(grep -oP "PDF:pSet=LHAPDF6:\K.*?(?=')" $PYTHON_FILENAME)"
 
-          # Take the first word of those results       
-          LHAPDF_SET_NAME=$(echo $LHAPDF_MENTIONS| cut -d' ' -f 2)
+          IFS=' ' read -r -a LIST_OF_DATASETS <<< "$STRING_OF_DATASETS"
 
           # cd to the LHAPDF dir
           cd $LHAPDF_DATA_PATH
-          # Remove other mentions of this dataset
-          sudo rm -fr $LHAPDF_SET_NAME
+          
 
-          echo "in $LHAPDF_DATA_PATH"
+          if (( ${#LIST_OF_DATASETS[@]} != 0 )); then
+            echo "Starting to install LHAPDFs ${LIST_OF_DATASETS[@]}"
 
-          # If the configuration contained mentions of LHAPDF, start installation
-          if [[ $LHAPDF_SET_NAME != "" ]]; then
-            echo "LHAPDF_SET_NAME" $LHAPDF_SET_NAME
-            sudo wget -q 'https://lhapdfsets.web.cern.ch/current/'"${LHAPDF_SET_NAME}"'.tar.gz'
-            sudo tar xf "$LHAPDF_SET_NAME"'.tar.gz'
-            sudo chown -R cmsinst:cmsinst .
-            sudo rm -r "$LHAPDF_SET_NAME"'.tar.gz'
+            for LHAPDF_SET_NAME in "${LIST_OF_DATASETS[@]}"
+            do
+              # Remove other mentions of this dataset
+              sudo rm -fr $LHAPDF_SET_NAME
 
-            echo "Did LHAPDF installation"
-          else
-            echo "No LHAPDF defined in the configuration, skipping LHAPDF installation."
+              echo "LHAPDF_SET_NAME" $LHAPDF_SET_NAME
+              echo "installing..."
+              sudo wget -q 'https://lhapdfsets.web.cern.ch/current/'"${LHAPDF_SET_NAME}"'.tar.gz'
+              sudo tar xf "$LHAPDF_SET_NAME"'.tar.gz'
+              sudo chown -R cmsinst:cmsinst .
+              sudo rm -r "$LHAPDF_SET_NAME"'.tar.gz'
+            done
+
+            echo "Finished LHAPDF installation"
           fi
+
 
           cd /code/CMSSW_10_6_30/src/
 
