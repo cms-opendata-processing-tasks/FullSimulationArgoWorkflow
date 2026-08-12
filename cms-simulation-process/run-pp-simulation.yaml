@@ -30,7 +30,7 @@ spec:
       - name: inputFileName
         value: "fragment.py"
       - name: cardName
-        value: "cardName"
+        value: "ExampleProcess_taunu_heavy_NLO_M700"
       ### EDIT BELOW: replace the placeholder '10' with the amount of events you want to process
       - name: totEvents
         value: 10
@@ -45,6 +45,11 @@ spec:
       ### EDIT BELOW: If you have already completed the LHE GEN step change the boolean to true
       - name: useLHE
         value: true
+      # - name: nodeNames
+      #   value: [
+      #     {"nodeName":"pck-44vdnby-p8x-hkbdk-56m8h"},
+      #     {"nodeName":"pck-44vdnby-p8x-hkbdk-l9t4n"}
+      #   ]
 
   templates:
     - name: cms-full-sim
@@ -59,6 +64,7 @@ spec:
           - name: runYear
           - name: useLHE
           - name: nNodes
+          # - name: nodeNames
 
       steps:
         - - name: divide-jobs
@@ -119,6 +125,8 @@ spec:
                 value: "{{inputs.parameters.useLHE}}"
               - name: jobList
                 value: "{{item.jobList}}"
+              # - name: nodeName
+              #   value: "{{inputs.parameters.nodeNames}}[{{item.nodeIndex}} - 1].nodeName}}"
             withParam: "{{steps.divide-jobs.outputs.result}}"
 
         - - name: merge-result-files
@@ -158,6 +166,10 @@ spec:
           - name: beamspot
           - name: useLHE
           - name: jobList
+          # - name: nodeName
+
+      # nodeSelector:
+      #   kubernetes.io/hostname: "{{inputs.parameters.nodeName}}"
 
       steps:
         # - - name: pull-cmssw10-image
@@ -194,6 +206,8 @@ spec:
                   value: "{{inputs.parameters.beamspot}}"
                 - name: useLHE
                   value: "{{inputs.parameters.useLHE}}"
+                # - name: nodeName
+                #   value: "{{inputs.parameters.nodeName}}"
             withParam: "{{inputs.parameters.jobList}}"
 
     - name: run-process-job-template
@@ -213,6 +227,10 @@ spec:
           - name: conditionsHLT
           - name: beamspot
           - name: useLHE
+      #     - name: nodeName
+      
+      # nodeSelector:
+      #   kubernetes.io/hostname: "{{inputs.parameters.nodeName}}"
 
       steps:
         - - name: lhe-gen
@@ -581,7 +599,7 @@ spec:
 
           sudo mkdir /output
           sudo chown -R cmsusr:cmsusr /output
-          mv /code/genproductions_scripts/bin/MadGraph5_aMCatNLO/{{inputs.parameters.cardName}}_slc7_amd64_gcc700_CMSSW_10_6_30_tarball.tar.xz /output
+          mv /code/genproductions_scripts/bin/MadGraph5_aMCatNLO/{{inputs.parameters.cardName}}_slc7_amd64_gcc700_CMSSW_10_6_0_tarball.tar.xz /output
           echo "moved gridpack to output"
           ls /output
 
@@ -641,7 +659,7 @@ spec:
           mkdir -p Configuration/GenProduction/python
 
           # Move the gridpack to the working directory
-          mv Configuration/GenProduction/python/{{inputs.parameters.cardName}}_slc7_amd64_gcc700_CMSSW_10_6_30_tarball.tar.xz .
+          mv Configuration/GenProduction/python/{{inputs.parameters.cardName}}_slc7_amd64_gcc700_CMSSW_10_6_0_tarball.tar.xz .
           
           scram b
 
@@ -649,6 +667,13 @@ spec:
           # --> this dir is mounted in the cloud storage
 
           mkdir -p /data/GEN
+
+          # Clean files from previous runs
+          find /data -mtime +1 -delete
+
+          # Show disk usage of volume
+          echo "The disk space on volume before starting the process job:"
+          du /data -h -d 1
 
           PYTHON_FILENAME=/data/GEN/GEN_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/GEN/GEN_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
@@ -666,47 +691,63 @@ spec:
           # To-do: find out what to do with the numberEventsInLuminosityBlock ^
           # some datasets have it 100, some have it 2500 or something
 
-          # To-do: Do all LHE GEN need this LHAPDF file, or something else --> figure out a way to extract the necessary LHAPDF from config like in regular GEN       
-          LHAPDF_SET_NAME="NNPDF31_nnlo_as_0118_nf_4_mc_hessian"
+          
+          # Determine what LHAPDF dataset to install from the gridpack
+
+          GRIDPACK_NAME="{{inputs.parameters.cardName}}"
+          FRAGMENT=/code/CMSSW_10_6_30/src/Configuration/GenProduction/python/{{inputs.parameters.inputFileName}}
+
+          # Find the path of the gridpack mentioned in the fragment
+          GRIDPACK_DIR="$(grep -oP "args = cms.vstring\K.*?(?=$GRIDPACK_NAME)" $FRAGMENT)"
+
+          # Because the grep cannot understand the ( and ' they are left in the GRIDPACK_DIR path
+          # Trim them manually:
+          GRIDPACK_DIR=${GRIDPACK_DIR:2}
+
+          echo "GRIDPACK_DIR $GRIDPACK_DIR"
+          # Move to the gridpack directory
+          cd $GRIDPACK_DIR
+          
+          # Extract the tarball
+          tar axf ${GRIDPACK_NAME}_slc7_amd64_gcc700_CMSSW_10_6_0_tarball.tar.xz
+
+          # Get the path of the PDF set mentions in the gridpack by using the find commant
+          PATH_TO_PDFSETS=$(find . -name 'PDFsets')
+          # Return the contents of this path
+          STRING_OF_DATASETS="$(ls $PATH_TO_PDFSETS)"
+
+          echo "path to PDFsets $PATH_TO_PDFSETS"
+          echo "lhapdf string $LHAPDF_STRING"
+
+          # Split all the words with a space delimiter and put them into an array
+          IFS=' ' read -r -a LIST_OF_DATASETS <<< "$STRING_OF_DATASETS"
+
+          echo "LIST_OF_DATASETS"
+          echo $LIST_OF_DATASETS
+          
+          # The CMSSW generation step also needs the NNPDF31_nnlo_as_0118
+          
+          LIST_OF_DATASETS+=('NNPDF31_nnlo_as_0118')
+
+          # LHAPDF_SET_NAME="NNPDF31_nnlo_as_0118_nf_4_mc_hessian"
 
           # cd to the LHAPDF dir
           cd $LHAPDF_DATA_PATH
-          # Remove other mentions of this dataset
-          sudo rm -fr $LHAPDF_SET_NAME
 
-          echo "in $LHAPDF_DATA_PATH"
+          for LHAPDF_SET_NAME in "${LIST_OF_DATASETS[@]}"
+          do
+            # Remove other mentions of this dataset
+            sudo rm -fr $LHAPDF_SET_NAME
 
-          echo "LHAPDF_SET_NAME" $LHAPDF_SET_NAME
-          echo "installing..."
-          sudo wget -q 'https://lhapdfsets.web.cern.ch/current/'"${LHAPDF_SET_NAME}"'.tar.gz'
-          sudo tar xf "$LHAPDF_SET_NAME"'.tar.gz'
-          sudo chown -R cmsinst:cmsinst .
-          sudo rm -r "$LHAPDF_SET_NAME"'.tar.gz'
+            echo "in $LHAPDF_DATA_PATH"
 
-          LHAPDF_SET_NAME="NNPDF31_nnlo_as_0118"
-
-          # Remove other mentions of this dataset
-          sudo rm -fr $LHAPDF_SET_NAME
-
-          echo "LHAPDF_SET_NAME" $LHAPDF_SET_NAME
-          echo "installing..."
-          sudo wget -q 'https://lhapdfsets.web.cern.ch/current/'"${LHAPDF_SET_NAME}"'.tar.gz'
-          sudo tar xf "$LHAPDF_SET_NAME"'.tar.gz'
-          sudo chown -R cmsinst:cmsinst .
-          sudo rm -r "$LHAPDF_SET_NAME"'.tar.gz'
-
-          LHAPDF_SET_NAME="NNPDF23_nlo_as_0119"
-
-          # Remove other mentions of this dataset
-          sudo rm -fr $LHAPDF_SET_NAME
-
-          echo "LHAPDF_SET_NAME" $LHAPDF_SET_NAME
-          echo "installing..."
-          sudo wget -q 'https://lhapdfsets.web.cern.ch/current/'"${LHAPDF_SET_NAME}"'.tar.gz'
-          sudo tar xf "$LHAPDF_SET_NAME"'.tar.gz'
-          sudo chown -R cmsinst:cmsinst .
-          sudo rm -r "$LHAPDF_SET_NAME"'.tar.gz'
-
+            echo "LHAPDF_SET_NAME" $LHAPDF_SET_NAME
+            echo "installing..."
+            sudo wget -q 'https://lhapdfsets.web.cern.ch/current/'"${LHAPDF_SET_NAME}"'.tar.gz'
+            sudo tar xf "$LHAPDF_SET_NAME"'.tar.gz'
+            sudo chown -R cmsinst:cmsinst .
+            sudo rm -r "$LHAPDF_SET_NAME"'.tar.gz'
+          done
 
           echo "Finished LHAPDF installation"
           
@@ -781,6 +822,9 @@ spec:
           # --> this dir is mounted in the cloud storage
 
           mkdir -p /data/GEN
+
+          # Clean files from previous runs
+          find /data -mtime +1 -delete
 
           PYTHON_FILENAME=/data/GEN/GEN_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/GEN/GEN_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
