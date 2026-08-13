@@ -12,18 +12,12 @@ spec:
     - name: volume2
       persistentVolumeClaim:
         claimName: pvc-2
-    - name: volume3
-      persistentVolumeClaim:
-        claimName: pvc-3
-    - name: volume4
-      persistentVolumeClaim:
-        claimName: pvc-4
             
   arguments:
     parameters:
       ### EDIT BELOW: replace the placeholder 'yourstorage' with the name of your object storage
       - name: bucket
-        value: yourstorage
+        value: mystorage
       - name: dataName
         value: "dataName"
       ### EDIT BELOW: replace the placeholder 'fragment.py' with the file name of your fragment
@@ -44,12 +38,10 @@ spec:
         value: "2016"
       ### EDIT BELOW: If you have already completed the LHE GEN step change the boolean to true
       - name: useLHE
-        value: true
-      # - name: nodeNames
-      #   value: [
-      #     {"nodeName":"pck-44vdnby-p8x-hkbdk-56m8h"},
-      #     {"nodeName":"pck-44vdnby-p8x-hkbdk-l9t4n"}
-      #   ]
+        value: false
+      ### EDIT BELOW: Set here the list of your node names, i.e. the output of kubectl get nodes -o jsonpath='{range .items[*]}{"{\"nodeName\":\""}{.metadata.name}{"\"}"}{","}{end}' | sed 's/,$//' | sed "s/\"/'/g"
+      - name: nodeNames
+        value: "[{'nodeName':'pck-xxxxxxx'},{'nodeName':'pck-xxxxxxx'}]"
 
   templates:
     - name: cms-full-sim
@@ -64,7 +56,7 @@ spec:
           - name: runYear
           - name: useLHE
           - name: nNodes
-          # - name: nodeNames
+          - name: nodeNames
 
       steps:
         - - name: divide-jobs
@@ -79,6 +71,8 @@ spec:
                   value: "{{inputs.parameters.jobsPerNode}}"
                 - name: nNodes
                   value: "{{inputs.parameters.nNodes}}"
+                - name: nodeNames
+                  value: "{{inputs.parameters.nodeNames}}"
 
         - - name: define-parameters
             template: define-parameters-template
@@ -125,8 +119,8 @@ spec:
                 value: "{{inputs.parameters.useLHE}}"
               - name: jobList
                 value: "{{item.jobList}}"
-              # - name: nodeName
-              #   value: "{{inputs.parameters.nodeNames}}[{{item.nodeIndex}} - 1].nodeName}}"
+              - name: nodeName
+                value: "{{item.node}}"
             withParam: "{{steps.divide-jobs.outputs.result}}"
 
         - - name: merge-result-files
@@ -166,10 +160,10 @@ spec:
           - name: beamspot
           - name: useLHE
           - name: jobList
-          # - name: nodeName
+          - name: nodeName
 
-      # nodeSelector:
-      #   kubernetes.io/hostname: "{{inputs.parameters.nodeName}}"
+      nodeSelector:
+        kubernetes.io/hostname: "{{inputs.parameters.nodeName}}"
 
       steps:
         # - - name: pull-cmssw10-image
@@ -206,8 +200,8 @@ spec:
                   value: "{{inputs.parameters.beamspot}}"
                 - name: useLHE
                   value: "{{inputs.parameters.useLHE}}"
-                # - name: nodeName
-                #   value: "{{inputs.parameters.nodeName}}"
+                - name: nodeName
+                  value: "{{inputs.parameters.nodeName}}"
             withParam: "{{inputs.parameters.jobList}}"
 
     - name: run-process-job-template
@@ -227,10 +221,10 @@ spec:
           - name: conditionsHLT
           - name: beamspot
           - name: useLHE
-      #     - name: nodeName
+          - name: nodeName
       
-      # nodeSelector:
-      #   kubernetes.io/hostname: "{{inputs.parameters.nodeName}}"
+      nodeSelector:
+        kubernetes.io/hostname: "{{inputs.parameters.nodeName}}"
 
       steps:
         - - name: lhe-gen
@@ -256,6 +250,8 @@ spec:
                   value: "{{inputs.parameters.conditionsGenSimReco}}"
                 - name: beamspot
                   value: "{{inputs.parameters.beamspot}}"
+                - name: nodeName
+                  value: "{{inputs.parameters.nodeName}}"
 
         - - name: gen
             template: gen-template
@@ -278,6 +274,8 @@ spec:
                   value: "{{inputs.parameters.conditionsGenSimReco}}"
                 - name: beamspot
                   value: "{{inputs.parameters.beamspot}}"
+                - name: nodeName
+                  value: "{{inputs.parameters.nodeName}}"
 
         - - name: sim
             template: sim-template
@@ -295,6 +293,8 @@ spec:
                   value: "{{inputs.parameters.conditionsGenSimReco}}"
                 - name: beamspot
                   value: "{{inputs.parameters.beamspot}}"
+                - name: nodeName
+                  value: "{{inputs.parameters.nodeName}}"
 
         - - name: pre-digi2raw
             template: pre-digi2raw-template
@@ -304,6 +304,8 @@ spec:
                   value: "{{inputs.parameters.dataName}}"
                 - name: nodeIndex
                   value: "{{inputs.parameters.nodeIndex}}"
+                - name: nodeName
+                  value: "{{inputs.parameters.nodeName}}"
 
         - - name: digi2raw
             template: digi2raw-template
@@ -319,6 +321,8 @@ spec:
                   value: "{{inputs.parameters.eventsInJob}}"
                 - name: conditionsDigiPatNano
                   value: "{{inputs.parameters.conditionsDigiPatNano}}"
+                - name: nodeName
+                  value: "{{inputs.parameters.nodeName}}"
 
         - - name: hlt
             template: hlt-template
@@ -334,6 +338,8 @@ spec:
                   value: "{{inputs.parameters.eventsInJob}}"
                 - name: conditionsHLT
                   value: "{{inputs.parameters.conditionsHLT}}"
+                - name: nodeName
+                  value: "{{inputs.parameters.nodeName}}"
 
         - - name: reco
             template: reco-template
@@ -349,6 +355,8 @@ spec:
                   value: "{{inputs.parameters.eventsInJob}}"
                 - name: conditionsGenSimReco
                   value: "{{inputs.parameters.conditionsGenSimReco}}"
+                - name: nodeName
+                  value: "{{inputs.parameters.nodeName}}"
 
         - - name: pat
             template: pat-template
@@ -366,6 +374,8 @@ spec:
                   value: "{{inputs.parameters.eventsInJob}}"
                 - name: conditionsDigiPatNano
                   value: "{{inputs.parameters.conditionsDigiPatNano}}"
+                - name: nodeName
+                  value: "{{inputs.parameters.nodeName}}"
 
         - - name: nano
             template: nano-template
@@ -383,6 +393,8 @@ spec:
                   value: "{{inputs.parameters.eventsInJob}}"
                 - name: conditionsDigiPatNano
                   value: "{{inputs.parameters.conditionsDigiPatNano}}"
+                - name: nodeName
+                  value: "{{inputs.parameters.nodeName}}"
 
     - name: pull-cmssw10-image-template
       initContainers:
@@ -407,6 +419,8 @@ spec:
           - name: totEvents
           - name: jobsPerNode
           - name: nNodes
+          - name: nodeNames
+
       script:
         image: python:alpine3.6
         command: [python]
@@ -434,7 +448,9 @@ spec:
           nNodes = {{inputs.parameters.nNodes}}
           totEvents = {{inputs.parameters.totEvents}}
           jobsPerNode = {{inputs.parameters.jobsPerNode}} 
+          nodeNames = {{inputs.parameters.nodeNames}}
           nJobs = jobsPerNode * nNodes
+
 
           if totEvents <= 0:
               raise ValueError("Amount of events processed should be greater than zero")
@@ -462,8 +478,7 @@ spec:
                   totEvents -= eventsInJob
                   nJobs -= 1
 
-
-              nodeItem = {"nodeIndex": i, "jobList": joblist}
+              nodeItem = {"nodeIndex": i, "node": nodeNames[i-1]["nodeName"], "jobList": joblist}
               dictlist.append(nodeItem)
 
           json.dump(dictlist, sys.stdout)
@@ -615,6 +630,7 @@ spec:
           - name: conditionsGenSimReco
           - name: beamspot
           - name: nodeIndex
+          - name: nodeName
         
         artifacts:
           - name: input-files
@@ -641,6 +657,7 @@ spec:
           - name: volume{{inputs.parameters.nodeIndex}}
             mountPath: /data
         source: |
+
           # Init first with sudo and then cmsusr
           echo "Initializing cmsenv"
           sudo --preserve-env=CMS_INSTALL_DIR,CMSSW_VERSION,SCRAM_ARCH /opt/cms/entrypoint.sh
@@ -666,8 +683,8 @@ spec:
 
           mkdir -p /data/GEN
 
-          # Clean files from previous runs
-          find /data -mtime +1 -delete
+          # Clean files from previous runs of the same job and node index
+          find /data -name '*node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root' -delete
 
           # Show disk usage of volume
           echo "The disk space on volume before starting the process job:"
@@ -681,7 +698,7 @@ spec:
           BEAMSPOT={{inputs.parameters.beamspot}} # Realistic25ns13TeV2016Collision
           
           cmsDriver.py Configuration/GenProduction/python/{{inputs.parameters.inputFileName}} --python_filename $PYTHON_FILENAME --eventcontent RAWSIM,LHE \
-          --customise Configuration/DataProcessing/Utils.addMonitoring --datatier GEN,LHE --fileout file:$OUTPUT_FILE \
+          --datatier GEN,LHE --fileout file:$OUTPUT_FILE \
           --conditions $CONDITIONS --beamspot $BEAMSPOT \
           --customise_commands process.source.numberEventsInLuminosityBlock="cms.untracked.uint32(100)" --step LHE,GEN \
           --geometry DB:Extended --era Run2_2016 --no_exec --mc -n $EVENTS
@@ -689,7 +706,18 @@ spec:
           # To-do: find out what to do with the numberEventsInLuminosityBlock ^
           # some datasets have it 100, some have it 2500 or something
 
-          
+
+          # Define a job specific seed for the event generation to avoid duplicate results between containers
+          cat <<EOF >> $PYTHON_FILENAME
+
+          workflow_seed = 12345 + int({{inputs.parameters.jobIndex}}+{{inputs.parameters.nodeIndex}})
+
+          for param in process.RandomNumberGeneratorService.parameterNames_():
+              module = getattr(process.RandomNumberGeneratorService, param)
+              if hasattr(module, 'initialSeed'):
+                  module.initialSeed = cms.untracked.uint32(workflow_seed)
+          EOF
+
           # Determine what LHAPDF dataset to install from the gridpack
 
           GRIDPACK_NAME="{{inputs.parameters.cardName}}"
@@ -776,6 +804,7 @@ spec:
           - name: conditionsGenSimReco
           - name: beamspot
           - name: nodeIndex
+          - name: nodeName
         
         artifacts:
           - name: input-fragment
@@ -802,6 +831,7 @@ spec:
           - name: volume{{inputs.parameters.nodeIndex}}
             mountPath: /data
         source: |
+
           # Init first with sudo and then cmsusr
           echo "Initializing cmsenv"
           sudo --preserve-env=CMS_INSTALL_DIR,CMSSW_VERSION,SCRAM_ARCH /opt/cms/entrypoint.sh
@@ -816,6 +846,13 @@ spec:
 
 
           mkdir -p Configuration/GenProduction/python
+
+          # Clean files from previous runs
+          find /data -name '*node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root' -delete
+
+          # Show disk usage of volume
+          echo "The disk space on volume before starting the process job:"
+          du /data -h -d 1
           
           scram b
 
@@ -835,7 +872,7 @@ spec:
           BEAMSPOT={{inputs.parameters.beamspot}} # Realistic25ns13TeV2016Collision
           
           cmsDriver.py Configuration/GenProduction/python/fragments.py --python_filename $PYTHON_FILENAME --eventcontent RAWSIM \
-          --customise Configuration/DataProcessing/Utils.addMonitoring --datatier GEN --fileout file:$OUTPUT_FILE \
+          --datatier GEN --fileout file:$OUTPUT_FILE \
           --conditions $CONDITIONS --beamspot $BEAMSPOT \
           --customise_commands process.source.numberEventsInLuminosityBlock="cms.untracked.uint32(100)" --step GEN \
           --geometry DB:Extended --era Run2_2016 --no_exec --mc -n $EVENTS
@@ -843,10 +880,18 @@ spec:
           # To-do: find out what to do with the numberEventsInLuminosityBlock ^
           # some datasets have it 100, some have it 2500 or something
 
-          # In the generated python file, find which LHAPDF set is needed
+          # Define a job specific seed for the event generation to avoid duplicate results between containers
+          cat <<EOF >> $PYTHON_FILENAME
 
-          # To-do: now the script just takes the first LHAPDF set of the ones mentioned in the config. In the future, make a for loop and go through all datasets and install them all
-          # Thusfar no dataset has needed multiple LHAPDF sets so this has not been necessary
+          workflow_seed = 12345 + int({{inputs.parameters.jobIndex}}+{{inputs.parameters.nodeIndex}})
+
+          for param in process.RandomNumberGeneratorService.parameterNames_():
+              module = getattr(process.RandomNumberGeneratorService, param)
+              if hasattr(module, 'initialSeed'):
+                  module.initialSeed = cms.untracked.uint32(workflow_seed)
+          EOF
+
+          # In the generated python file, find which LHAPDF set is needed
 
           # Grep all the mentions of LHAPDF in the configuration file
           STRING_OF_DATASETS="$(grep -oP "PDF:pSet=LHAPDF6:\K.*?(?=')" $PYTHON_FILENAME)"
@@ -897,6 +942,7 @@ spec:
           - name: conditionsGenSimReco
           - name: beamspot
           - name: nodeIndex
+          - name: nodeName
 
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
@@ -905,6 +951,7 @@ spec:
           - name: volume{{inputs.parameters.nodeIndex}}
             mountPath: /data
         source: |
+
           # Init first with sudo and then cmsusr
           echo "Initializing cmsenv"
           sudo --preserve-env=CMS_INSTALL_DIR,CMSSW_VERSION,SCRAM_ARCH /opt/cms/entrypoint.sh
@@ -921,6 +968,10 @@ spec:
 
           mkdir -p /data/SIM
 
+          # Show disk usage of volume
+          echo "The disk space on volume before starting the process job:"
+          du /data -h -d 1
+
           PYTHON_FILENAME=/data/SIM/SIM_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}_cfg.py
           OUTPUT_FILE=/data/SIM/SIM_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
           INPUT_FILE=/data/GEN/GEN_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
@@ -929,8 +980,7 @@ spec:
           CONDITIONS={{inputs.parameters.conditionsGenSimReco}} # 106X_mcRun2_asymptotic_v13
           BEAMSPOT={{inputs.parameters.beamspot}} # Realistic25ns13TeV2016Collision
 
-          cmsDriver.py --python_filename $PYTHON_FILENAME --eventcontent RAWSIM \
-          --customise Configuration/DataProcessing/Utils.addMonitoring --datatier GEN-SIM \
+          cmsDriver.py --python_filename $PYTHON_FILENAME --eventcontent RAWSIM --datatier GEN-SIM \
           --fileout file:$OUTPUT_FILE --conditions $CONDITIONS --beamspot $BEAMSPOT \
           --step SIM --geometry DB:Extended --filein file:$INPUT_FILE --era Run2_2016 --runUnscheduled --no_exec --mc -n $EVENTS
 
@@ -946,6 +996,8 @@ spec:
       inputs:
         parameters:
           - name: nodeIndex
+          - name: nodeName
+
       script:
         image: cernopendata/cernopendata-client
         command: [bash]
@@ -966,6 +1018,7 @@ spec:
           - name: jobIndex
           - name: eventsInJob
           - name: conditionsDigiPatNano
+          - name: nodeName
 
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
@@ -974,6 +1027,7 @@ spec:
           - name: volume{{inputs.parameters.nodeIndex}}
             mountPath: /data
         source: |
+
           # Init first with sudo and then cmsusr
           echo "Initializing cmsenv"
           sudo --preserve-env=CMS_INSTALL_DIR,CMSSW_VERSION,SCRAM_ARCH /opt/cms/entrypoint.sh
@@ -990,6 +1044,10 @@ spec:
 
           mkdir -p /data/DIGIPremix
 
+          # Show disk usage of volume
+          echo "The disk space on volume before starting the process job:"
+          du /data -h -d 1
+
           # Delete useless GEN step root from block storage
           # to make room for future files
 
@@ -1004,8 +1062,7 @@ spec:
 
           mapfile -n {{inputs.parameters.jobIndex}} SELECTED_PILEUP_FILES < /data/pileup_file_list.txt
 
-          cmsDriver.py --python_filename $PYTHON_FILENAME --eventcontent PREMIXRAW \
-          --customise Configuration/DataProcessing/Utils.addMonitoring --datatier GEN-SIM-DIGI \
+          cmsDriver.py --python_filename $PYTHON_FILENAME --eventcontent PREMIXRAW --datatier GEN-SIM-DIGI \
           --fileout file:$OUTPUT_FILE --pileup_input ${SELECTED_PILEUP_FILES[{{inputs.parameters.jobIndex}} - 1]} \
           --datamix PreMix --procModifiers premix_stage2 --conditions $CONDITIONS --step DIGI,DATAMIX,L1,DIGI2RAW \
           --geometry DB:Extended --filein file:$INPUT_FILE --era Run2_2016 --runUnscheduled --no_exec --mc -n $EVENTS
@@ -1045,6 +1102,7 @@ spec:
           - name: jobIndex
           - name: eventsInJob
           - name: conditionsHLT
+          - name: nodeName
 
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker/cmssw_8_0_33_ul-slc7_amd64_gcc530
@@ -1053,6 +1111,7 @@ spec:
           - name: volume{{inputs.parameters.nodeIndex}}
             mountPath: /data
         source: |
+
           # Init first with sudo and then cmsusr
           echo "Initializing cmsenv"
           sudo --preserve-env=CMS_INSTALL_DIR,CMSSW_VERSION,SCRAM_ARCH /opt/cms/entrypoint.sh
@@ -1069,6 +1128,10 @@ spec:
 
           mkdir -p /data/HLT
 
+          # Show disk usage of volume
+          echo "The disk space on volume before starting the process job:"
+          du /data -h -d 1
+
           # Delete old files to make room for future files
           rm -f /data/SIM/SIM_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
 
@@ -1080,8 +1143,7 @@ spec:
           CONDITIONS={{inputs.parameters.conditionsHLT}}
 
           cmsDriver.py --python_filename $PYTHON_FILENAME --eventcontent RAWSIM \
-          --outputCommand "keep *_mix_*_*,keep *_genPUProtons_*_*" \
-          --customise Configuration/DataProcessing/Utils.addMonitoring --datatier GEN-SIM-RAW \
+          --outputCommand "keep *_mix_*_*,keep *_genPUProtons_*_*" --datatier GEN-SIM-RAW \
           --inputCommands "keep *","drop *_*_BMTF_*","drop *PixelFEDChannel*_*_*_*" \
           --fileout file:$OUTPUT_FILE --customise_commands 'process.source.bypassVersionCheck = cms.untracked.bool(True)' \
           --step HLT:25ns15e33_v4 --conditions $CONDITIONS \
@@ -1104,6 +1166,7 @@ spec:
           - name: jobIndex
           - name: eventsInJob
           - name: conditionsGenSimReco
+          - name: nodeName
 
       script:
         image: gitlab-registry.cern.ch/cms-cloud/cmssw-docker-opendata/cmssw_10_6_30-slc7_amd64_gcc700
@@ -1112,6 +1175,7 @@ spec:
           - name: volume{{inputs.parameters.nodeIndex}}
             mountPath: /data
         source: |
+
           # Init first with sudo and then cmsusr
           echo "Initializing cmsenv"
           sudo --preserve-env=CMS_INSTALL_DIR,CMSSW_VERSION,SCRAM_ARCH /opt/cms/entrypoint.sh
@@ -1128,6 +1192,10 @@ spec:
 
           mkdir -p /data/RECO
 
+          # Show disk usage of volume
+          echo "The disk space on volume before starting the process job:"
+          du /data -h -d 1
+
           rm -f /data/DIGIPremix/DIGIPremix_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
 
           PYTHON_FILENAME=/data/RECO/RECO_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}_cfg.py
@@ -1138,7 +1206,7 @@ spec:
           CONDITIONS={{inputs.parameters.conditionsGenSimReco}}
 
           cmsDriver.py --python_filename $PYTHON_FILENAME --eventcontent AODSIM \
-          --customise Configuration/DataProcessing/Utils.addMonitoring --datatier AODSIM --fileout file:$OUTPUT_FILE \
+          --datatier AODSIM --fileout file:$OUTPUT_FILE \
           --conditions $CONDITIONS --step RAW2DIGI,L1Reco,RECO,RECOSIM --geometry DB:Extended \
           --filein file:$INPUT_FILE --era Run2_2016 --runUnscheduled --no_exec --mc -n $EVENTS
 
@@ -1160,6 +1228,7 @@ spec:
           - name: jobIndex
           - name: eventsInJob
           - name: conditionsDigiPatNano
+          - name: nodeName
           
       outputs:
         artifacts:
@@ -1187,6 +1256,7 @@ spec:
           - name: volume{{inputs.parameters.nodeIndex}}
             mountPath: /data
         source: |
+
           # Init first with sudo and then cmsusr
           echo "Initializing cmsenv"
           sudo --preserve-env=CMS_INSTALL_DIR,CMSSW_VERSION,SCRAM_ARCH /opt/cms/entrypoint.sh
@@ -1203,6 +1273,10 @@ spec:
 
           mkdir -p /data/PAT
 
+          # Show disk usage of volume
+          echo "The disk space on volume before starting the process job:"
+          du /data -h -d 1
+
           # Remove if there are old files from previous runs on the volume
           # This dir should be clean since it is mounted to the object storage
           find /data/PAT/ -mtime +1 -delete
@@ -1217,7 +1291,7 @@ spec:
           CONDITIONS={{inputs.parameters.conditionsDigiPatNano}}
 
           cmsDriver.py --python_filename $PYTHON_FILENAME --eventcontent MINIAODSIM \
-          --customise Configuration/DataProcessing/Utils.addMonitoring --datatier MINIAODSIM --fileout file:$OUTPUT_FILE \
+          --datatier MINIAODSIM --fileout file:$OUTPUT_FILE \
           --conditions $CONDITIONS --step PAT --procModifiers run2_miniAOD_UL --geometry DB:Extended \
           --filein file:$INPUT_FILE --era Run2_2016 --runUnscheduled --no_exec --mc -n $EVENTS
 
@@ -1239,6 +1313,8 @@ spec:
           - name: jobIndex
           - name: eventsInJob
           - name: conditionsDigiPatNano
+          - name: nodeName
+
       outputs:
         artifacts:
           - name: NanoAOD
@@ -1265,6 +1341,7 @@ spec:
           - name: volume{{inputs.parameters.nodeIndex}}
             mountPath: /data
         source: |
+
           # Init first with sudo and then cmsusr
           echo "Initializing cmsenv"
           sudo --preserve-env=CMS_INSTALL_DIR,CMSSW_VERSION,SCRAM_ARCH /opt/cms/entrypoint.sh
@@ -1282,9 +1359,9 @@ spec:
           sudo mkdir -p /data/NANO
           sudo chown -R cmsusr:cmsusr /data/NANO
 
-          # Remove if there are old files from previous runs on the volume
-          # This dir should be clean since it is mounted to the object storage
-          find /data/NANO -mtime +1 -delete
+          # Show disk usage of volume
+          echo "The disk space on volume before starting the process job:"
+          du /data -h -d 1
 
           rm -f /data/RECO/RECO_node{{inputs.parameters.nodeIndex}}_job{{inputs.parameters.jobIndex}}.root
 
@@ -1296,7 +1373,7 @@ spec:
           CONDITIONS={{inputs.parameters.conditionsDigiPatNano}}
 
           cmsDriver.py --python_filename $PYTHON_FILENAME --eventcontent NANOAODSIM \
-          --customise Configuration/DataProcessing/Utils.addMonitoring --datatier NANOAODSIM \
+          --datatier NANOAODSIM \
           --fileout file:$OUTPUT_FILE --conditions $CONDITIONS --step NANO \
           --filein file:$INPUT_FILE --era Run2_2016,run2_nanoAOD_106Xv2 --no_exec --mc -n $EVENTS
 
@@ -1342,11 +1419,7 @@ spec:
             mountPath: /data/1
           - name: volume2
             mountPath: /data/2
-          - name: volume3
-            mountPath: /data/3
-          - name: volume4
-            mountPath: /data/4
-          
+
         source: |
           mkdir -p /code/output /data/1 /data/2
 
